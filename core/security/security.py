@@ -95,8 +95,16 @@ async def validate_token(request: Request, conn, check_can_update: bool = False,
         logger.exception(e)
         raise HTTPException(status_code=401, detail="Invalid token")
 
+# Validates the token right before the user actually changes their password.
+# It strictly requires the 'canUpdate' permission (proving they passed the code validation step)
+# and passes reset_cookie=True to issue a fresh, standard session cookie after the password is updated.
+
 async def validate_token_to_update_password(request: Request, conn = Depends(postgresql.get_db)) -> dict:
     return await validate_token(request, conn, check_can_update=True, reset_cookie=True)
+
+# Validates the token during the email code verification step.
+# We don't require the 'canUpdate' permission here because the user is just proving they own the email.
+# We pass reset_cookie=True to generate a new, temporary token (which will grant the 'canUpdate' permission for the final step).
 
 async def validate_token_to_validate_code(request: Request, conn = Depends(postgresql.get_db)) -> dict:
     return await validate_token(request, conn, check_can_update=False, reset_cookie=True)
