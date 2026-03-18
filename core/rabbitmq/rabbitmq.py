@@ -10,7 +10,8 @@ class RabbitMQ:
         self.config = settings
 
     async def connect(self):
-        self.connection = await connect_robust(f"amqp://{self.config.RABBITMQ_USER}:{self.config.RABBITMQ_PASSWORD}@{self.config.RABBITMQ_HOST}:{self.config.RABBITMQ_PORT}/")
+        self.connection = await connect_robust(
+            f"amqp://{self.config.RABBITMQ_USER}:{self.config.RABBITMQ_PASSWORD}@{self.config.RABBITMQ_HOST}:{self.config.RABBITMQ_PORT}/")
         self.channel = await self.connection.channel()
 
     async def disconnect(self):
