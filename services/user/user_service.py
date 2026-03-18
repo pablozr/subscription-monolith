@@ -1,4 +1,7 @@
-async def get_one_user(conn, user_id: int):
+from schemas.user import UserGetResponse
+
+
+async def get_one_user(conn, user_id: int) -> UserGetResponse:
 
     query = "SELECT id, email FROM users WHERE id = $1"
 
@@ -12,7 +15,7 @@ async def get_one_user(conn, user_id: int):
         "message": "User retrieved successfully",
         "data": {
             "user": {
-                "userId": row["id"],
+                "user_id": row["id"],
                 "email": row["email"]
             }
         }
