@@ -1,10 +1,11 @@
 import bcrypt
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from core.logger.logger import logger
 from core.config.config import settings
 from core.postgresql.postgresql import postgresql
 from services.user.user_service import get_one_user
+from fastapi import Request, HTTPException, Depends
 
 
 def hash_password(password: str) -> str:
@@ -22,7 +23,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
-    expire = datetime.now() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
 
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
@@ -39,14 +40,13 @@ def decode_access_token(token: str) -> dict | None:
         logger.error("Invalid token")
         return None
 
-async def verify_token(token: str, check_can_update: bool = False) -> dict | bool | None:
+async def verify_token(token: str, conn, check_can_update: bool = False) -> dict | bool | None:
     try:
 
         if token.startswith("Bearer "):
             token = token[7:]
 
         payload = decode_access_token(token)
-        conn = postgresql.get_db()
 
         if payload["userId"]:
             response = await get_one_user(conn, payload["userId"])
@@ -69,3 +69,59 @@ async def verify_token(token: str, check_can_update: bool = False) -> dict | boo
     except jwt.InvalidTokenError as e:
         logger.error(f"Invalid token")
         return False
+
+async def validate_token(request: Request, conn, check_can_update: bool = False, reset_cookie: bool = False) -> dict:
+    try:
+        cookie_key = "auth" if not reset_cookie else "auth_reset"
+        token = request.cookies.get(cookie_key)
+
+        if not token:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+
+        user = await verify_token(token, conn=conn, check_can_update=check_can_update)
+
+        if user is None:
+            raise HTTPException(status_code=401, detail="Token has expired")
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        request.state.token = token
+
+        return user
+
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+async def validate_token_to_update_password(request: Request, conn = Depends(postgresql.get_db)) -> dict:
+    return await validate_token(request, conn, check_can_update=True, reset_cookie=True)
+
+async def validate_token_to_validate_code(request: Request, conn = Depends(postgresql.get_db)) -> dict:
+    return await validate_token(request, conn, check_can_update=False, reset_cookie=True)
+
+async def validate_token_wrapper(request: Request, conn = Depends(postgresql.get_db)) -> dict:
+    return await validate_token(request, conn)
+
+#==========================================================
+# JUST IN CASE IN THE FUTURE I NEED TO CONTROL ROLE ACCESS
+#==========================================================
+
+def require_minimum_rank(minimum_rank: int):
+    async def decorator(user:  dict = Depends(validate_token_wrapper)):
+
+        role_ranks = {
+            "BASIC" : 1,
+            "ADMIN" : 2
+        }
+
+        user_role = user.get("role", "").upper()
+        rank = role_ranks.get(user_role, 0)
+
+        if rank < minimum_rank:
+            raise HTTPException(status_code=403, detail="User doesn't have enough rank")
+
+        return user
+    return decorator
+
+def require_admin_rank():
+    return require_minimum_rank(2)
