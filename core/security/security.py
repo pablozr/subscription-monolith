@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from core.logger.logger import logger
 from core.config.config import settings
 from core.postgresql.postgresql import postgresql
-from services.user.user_service import get_one_user
+from services.user import user_service
 from fastapi import Request, HTTPException, Depends
 
 
@@ -49,7 +49,7 @@ async def verify_token(token: str, conn, check_can_update: bool = False) -> dict
         payload = decode_access_token(token)
 
         if payload["userId"]:
-            response = await get_one_user(conn, payload["userId"])
+            response = await user_service.get_one_user(conn, payload["userId"])
 
             if response["status"] is None or not response["status"]:
                 raise jwt.InvalidSignatureError("User not found")
@@ -66,7 +66,7 @@ async def verify_token(token: str, conn, check_can_update: bool = False) -> dict
     except jwt.ExpiredSignatureError:
         logger.error("Token has expired")
         return None
-    except jwt.InvalidTokenError as e:
+    except jwt.InvalidTokenError:
         logger.error(f"Invalid token")
         return False
 
