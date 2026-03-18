@@ -63,6 +63,7 @@ async def verify_token(token: str, conn, check_can_update: bool = False) -> dict
         else:
             raise jwt.InvalidTokenError("Invalid token payload")
 
+    # I use None to represent expired, and False to invalid *
     except jwt.ExpiredSignatureError:
         logger.error("Token has expired")
         return None
@@ -80,6 +81,7 @@ async def validate_token(request: Request, conn, check_can_update: bool = False,
 
         user = await verify_token(token, conn=conn, check_can_update=check_can_update)
 
+        # I use None to represent expired, and False to invalid **
         if user is None:
             raise HTTPException(status_code=401, detail="Token has expired")
         if not user:
@@ -122,6 +124,8 @@ def require_minimum_rank(minimum_rank: int):
 
         return user
     return decorator
+
+# Here I could have used the wrapper, like I did before with validate_token, or I can use decorator functions
 
 def require_admin_rank():
     return require_minimum_rank(2)
