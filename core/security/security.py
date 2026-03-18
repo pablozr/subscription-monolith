@@ -97,7 +97,7 @@ async def validate_token(request: Request, conn, check_can_update: bool = False,
 
 # Validates the token right before the user actually changes their password.
 # It strictly requires the 'canUpdate' permission (proving they passed the code validation step)
-# and passes reset_cookie=True to issue a fresh, standard session cookie after the password is updated.
+# and passes reset_cookie=True to look for the reset_auth key
 
 async def validate_token_to_update_password(request: Request, conn = Depends(postgresql.get_db)) -> dict:
     return await validate_token(request, conn, check_can_update=True, reset_cookie=True)
