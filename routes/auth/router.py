@@ -17,7 +17,7 @@ async def login(data: LoginRequestModel, conn=Depends(postgresql.get_db)):
             return JSONResponse(status_code=400, content={"detail": response["message"]})
 
         token = response["data"]["access_token"]
-        response["data"].pop("token", None)
+        response["data"].pop("access_token", None)
 
         resp = JSONResponse(status_code=200, content={"message": response["message"], "data": response["data"]})
 
@@ -46,7 +46,7 @@ async def google_login(data: LoginGoogleRequestModel, conn=Depends(postgresql.ge
             return JSONResponse(status_code=400, content={"detail": response["message"]})
 
         token = response["data"]["access_token"]
-        response["data"].pop("token", None)
+        response["data"].pop("access_token", None)
 
         resp = JSONResponse(status_code=200, content={"message": response["message"], "data": response["data"]})
 
