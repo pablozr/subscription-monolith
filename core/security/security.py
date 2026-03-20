@@ -6,6 +6,8 @@ from core.config.config import settings
 from core.postgresql.postgresql import postgresql
 from services.user import user_service
 from fastapi import Request, HTTPException, Depends
+from google.oauth2 import id_token
+from google.auth.transport import requests
 
 
 def hash_password(password: str) -> str:
@@ -44,6 +46,16 @@ def decode_access_token(token: str) -> dict | None:
         return None
 
 
+def verify_google_token(token: str) -> dict | None:
+    try:
+        user = id_token.verify_oauth2_token(token, requests.Request(), settings.GOOGLE_CLIENT_ID)
+
+        return {**user}
+    except ValueError:
+        logger.error("Invalid Google token")
+        return None
+
+
 async def verify_token(token: str, conn, check_can_update: bool = False) -> dict | bool | None:
     try:
 
@@ -60,10 +72,10 @@ async def verify_token(token: str, conn, check_can_update: bool = False) -> dict
 
             if check_can_update:
                 if payload["canUpdate"]:
-                    return response["data"]["user"]
+                    return dict(response["data"]["user"])
                 else:
                     raise jwt.InvalidTokenError("User does not have update permissions")
-            return response["data"]["user"]
+            return dict(response["data"]["user"])
         else:
             raise jwt.InvalidTokenError("Invalid token payload")
 

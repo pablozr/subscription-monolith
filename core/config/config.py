@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str
     EMAIL_FROM: str
 
+    GOOGLE_CLIENT_ID: str
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
