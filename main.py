@@ -4,6 +4,7 @@ from core.postgresql.postgresql import postgresql
 from core.redis.redis import redis_cache
 from core.rabbitmq.rabbitmq import rabbitmq
 from fastapi import FastAPI
+from routes.auth.router import router as auth_router
 # from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
@@ -38,6 +39,8 @@ async def custom_docs():
         openapi_url="/api/v1/master/openapi.json",
         title="Documentação da API - Master",
     )
+
+app.include_router(auth_router, prefix="/auth", tags=["auth"])
 
 if __name__ == "__main__":
     import uvicorn
