@@ -1,8 +1,12 @@
-from schemas.auth import LoginRequestModel, LoginGoogleRequestModel
+from schemas.auth import LoginRequestModel, LoginGoogleRequestModel, ForgetPasswordRequestModel
 from core.security import security
 from core.logger.logger import logger
 from schemas.user import UserCreateRequest
 from services.user import user_service
+from functions.utils import utils
+from services.cache import cache_service
+from services.messaging import messaging_service
+from templates.email import master_forget_password_email_template
 
 
 async def login(conn, login_data: LoginRequestModel) -> dict:
@@ -110,3 +114,51 @@ async def google_login(conn, data: LoginGoogleRequestModel) -> dict:
     except Exception as e:
         logger.error(e)
         return {"status": False, "message": "An error occurred during login"}
+
+
+async def forget_password(conn, clientmq, redis_client, data: ForgetPasswordRequestModel) -> dict:
+    select_query = """
+        SELECT id, email
+        FROM users
+        WHERE email = $1 \
+    """
+
+    try:
+        row = await conn.fetchrow(select_query, data.email)
+
+        if not row:
+            return {"status": False, "message": "If the email exists, a reset code was sent"}
+
+        code = utils.generate_temp_code()
+        await cache_service.create_items_by_key(f"{row["id"]}:{data.email}",600, {"code": code},redis_client)
+
+        payload = {
+            "to": data.email,
+            "from": "pablo@sla",
+            "html": master_forget_password_email_template.replace('CODIGO_AQUI', code),
+            "subject": 'Redefinição de Senha',
+            "base64Attachment": '',
+            "base64AttachmentName": '',
+            "message": ''
+        }
+
+        await messaging_service.publish("email-queue", payload, clientmq)
+
+        access_token = security.create_access_token(
+            {
+                "userId": row["id"],
+                "email": row["email"],
+                "canUpdate": False
+            }
+        )
+
+        return {
+            "status": True,
+            "message": "Email sent successfully ",
+            "data": {
+                "access_token": access_token,
+            }
+        }
+    except Exception as e:
+        logger.error(e)
+        return {"status": False, "message": "An error occurred during sending email "}

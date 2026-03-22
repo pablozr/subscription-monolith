@@ -1,5 +1,6 @@
 import json
 import inspect
+from random import shuffle
 from typing import Callable
 from fastapi.responses import JSONResponse
 from core.logger.logger import logger
@@ -53,3 +54,12 @@ def update_default_dict(data: dict, json_targets: list[str] = [], decimal_target
 
 def is_async_callable(fn: Callable) -> bool:
     return inspect.iscoroutinefunction(fn)
+
+
+def generate_temp_code():
+    numbers = list(map(str, range(10)))
+    shuffle(numbers)
+
+    base_password = numbers[:6]
+    shuffle(base_password)
+    return "".join(base_password)

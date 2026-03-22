@@ -8,3 +8,7 @@ class LoginRequestModel(BaseModel):
 
 class LoginGoogleRequestModel(BaseModel):
     token: str
+
+
+class ForgetPasswordRequestModel(BaseModel):
+    email: str
