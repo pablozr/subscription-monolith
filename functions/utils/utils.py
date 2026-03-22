@@ -1,6 +1,7 @@
 import json
 import inspect
-from random import shuffle
+import secrets
+import string
 from typing import Callable
 from fastapi.responses import JSONResponse
 from core.logger.logger import logger
@@ -57,9 +58,4 @@ def is_async_callable(fn: Callable) -> bool:
 
 
 def generate_temp_code():
-    numbers = list(map(str, range(10)))
-    shuffle(numbers)
-
-    base_password = numbers[:6]
-    shuffle(base_password)
-    return "".join(base_password)
+    return ''.join(secrets.choice(string.digits) for _ in range(6))

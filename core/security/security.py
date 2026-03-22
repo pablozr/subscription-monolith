@@ -56,13 +56,16 @@ def verify_google_token(token: str) -> dict | None:
         return None
 
 
-async def verify_token(token: str, conn, check_can_update: bool = False) -> dict | bool | None:
+async def verify_token(token: str, conn, check_can_update: bool = False, expected_type: str = "auth") -> dict | bool | None:
     try:
 
         if token.startswith("Bearer "):
             token = token[7:]
 
         payload = decode_access_token(token)
+
+        if payload.get("type") != expected_type:
+            raise jwt.InvalidTokenError("Token type mismatch")
 
         if payload["userId"]:
             response = await user_service.get_one_user(conn, payload["userId"])
@@ -88,7 +91,7 @@ async def verify_token(token: str, conn, check_can_update: bool = False) -> dict
         return False
 
 
-async def validate_token(request: Request, conn, check_can_update: bool = False, reset_cookie: bool = False) -> dict:
+async def validate_token(request: Request, conn, check_can_update: bool = False, reset_cookie: bool = False, expected_type: str = "auth") -> dict:
     try:
         cookie_key = "auth" if not reset_cookie else "auth_reset"
         token = request.cookies.get(cookie_key)
@@ -96,7 +99,7 @@ async def validate_token(request: Request, conn, check_can_update: bool = False,
         if not token:
             raise HTTPException(status_code=401, detail="Not authenticated")
 
-        user = await verify_token(token, conn=conn, check_can_update=check_can_update)
+        user = await verify_token(token, conn=conn, check_can_update=check_can_update, expected_type=expected_type)
 
         # I use None to represent expired, and False to invalid **
         if user is None:
@@ -118,7 +121,7 @@ async def validate_token(request: Request, conn, check_can_update: bool = False,
 # and passes reset_cookie=True to look for the reset_auth key
 
 async def validate_token_to_update_password(request: Request, conn=Depends(postgresql.get_db)) -> dict:
-    return await validate_token(request, conn, check_can_update=True, reset_cookie=True)
+    return await validate_token(request, conn, check_can_update=True, reset_cookie=True, expected_type="reset")
 
 
 # Validates the token during the email code verification step.
@@ -126,7 +129,7 @@ async def validate_token_to_update_password(request: Request, conn=Depends(postg
 # We pass reset_cookie=True to generate a new, temporary token (which will grant the 'canUpdate' permission for the final step).
 
 async def validate_token_to_validate_code(request: Request, conn=Depends(postgresql.get_db)) -> dict:
-    return await validate_token(request, conn, check_can_update=False, reset_cookie=True)
+    return await validate_token(request, conn, check_can_update=False, reset_cookie=True, expected_type="reset")
 
 
 async def validate_token_wrapper(request: Request, conn=Depends(postgresql.get_db)) -> dict:

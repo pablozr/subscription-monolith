@@ -1,3 +1,6 @@
+import secrets
+from datetime import timedelta
+
 from schemas.auth import LoginRequestModel, LoginGoogleRequestModel, ForgetPasswordRequestModel
 from core.security import security
 from core.logger.logger import logger
@@ -30,7 +33,8 @@ async def login(conn, login_data: LoginRequestModel) -> dict:
                 "userId": user["id"],
                 "email": user["email"],
                 "fullname": user["fullname"],
-                "role": user["role"]
+                "role": user["role"],
+                "type": "auth"
             }
         )
 
@@ -71,7 +75,7 @@ async def google_login(conn, data: LoginGoogleRequestModel) -> dict:
         if not user:
             new_user = UserCreateRequest(
                 email=google_user["email"],
-                password=google_user["sub"],
+                password=secrets.token_urlsafe(32),
                 fullname=google_user["name"]
             )
 
@@ -94,7 +98,8 @@ async def google_login(conn, data: LoginGoogleRequestModel) -> dict:
                 "userId": user["id"],
                 "email": user["email"],
                 "fullname": user["fullname"],
-                "role": user["role"]
+                "role": user["role"],
+                "type": "auth"
             }
         )
 
@@ -148,8 +153,10 @@ async def forget_password(conn, clientmq, redis_client, data: ForgetPasswordRequ
             {
                 "userId": row["id"],
                 "email": row["email"],
-                "canUpdate": False
-            }
+                "canUpdate": False,
+                "type": "reset"
+            },
+            expires_delta=timedelta(minutes=15)
         )
 
         return {

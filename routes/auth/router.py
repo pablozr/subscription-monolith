@@ -88,7 +88,7 @@ async def forget_password(
 
         ):
     try:
-        response = await auth_service.forget_password(data, conn, clientmq, redis_client)
+        response = await auth_service.forget_password(conn, clientmq, redis_client, data)
 
         if not response["status"]:
             return JSONResponse(status_code=400, content={"detail": response["message"]})
@@ -103,7 +103,7 @@ async def forget_password(
             httponly=True,
             samesite="lax",
             path="/",
-            max_age=259200,
+            max_age=900,
             secure=True,
         )
 
