@@ -1,8 +1,7 @@
 import secrets
 from datetime import timedelta
-
 import asyncpg
-
+import redis.asyncio
 from schemas.auth import LoginRequestModel, LoginGoogleRequestModel, ForgetPasswordRequestModel
 from core.security import security
 from core.logger.logger import logger
@@ -173,5 +172,32 @@ async def forget_password(conn: asyncpg.Connection, clientmq, redis_client, data
         return {"status": False, "message": "An error occurred during sending email "}
 
 
-async def validate_code():
-    pass
+async def validate_code(redis_client: redis.asyncio.Redis , code: str, user: dict):
+    try:
+        redis_code = await cache_service.get_items_by_key(user["id"], redis_client)
+
+        if not redis_code:
+            return {"status": False, "message": "Invalid user"}
+        
+        if code != redis_code:
+            return{"status": False, "message": "Invalid code"}
+        
+        access_token = security.create_access_token(
+             {
+                "userId": user["id"],
+                "email": user["email"],
+                "canUpdate": True,
+                "type": "reset"
+            }
+        )
+
+        return {
+            "status": True,
+            "message": "Valid code",
+            "data": {
+                "access_token": access_token,
+            }
+        }
+    except Exception as e:
+        logger.error(e)
+        return {"status": False, "message": "Internal server error"}
