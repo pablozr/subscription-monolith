@@ -2,7 +2,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-
     ENVIRONMENT: str = "development"
     API_PORT: int = 8000
 

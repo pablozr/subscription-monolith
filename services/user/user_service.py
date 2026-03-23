@@ -25,9 +25,8 @@ async def get_one_user(conn, user_id: int) -> UserGetResponse:
 
 async def create_user(conn, data: UserCreateRequest) -> dict:
     insert_query = """
-                    INSERT INTO users (email, password, fullname, role, created_at)
-                    VALUES ($1, $2, $3, 'BASIC', NOW())
-                    RETURNING id, email, fullname, role
+                   INSERT INTO users (email, password, fullname, role, created_at)
+                   VALUES ($1, $2, $3, 'BASIC', NOW()) RETURNING id, email, fullname, role
                    """
 
     try:

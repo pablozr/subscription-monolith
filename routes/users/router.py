@@ -1,14 +1,15 @@
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse
 from core.logger.logger import logger
-from core.postgresql.postgresql import  postgresql
+from core.postgresql.postgresql import postgresql
 from schemas.user import UserCreateRequest
 from services.user import user_service
+from core.security import security
 
 router = APIRouter()
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(security.validate_token_wrapper)])
 async def create_user(data: UserCreateRequest, conn=Depends(postgresql.get_db)):
     try:
         response = await user_service.create_user(conn, data)

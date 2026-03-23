@@ -7,7 +7,8 @@ from fastapi.responses import JSONResponse
 from core.logger.logger import logger
 
 
-async def default_response(callable_function: Callable, params: list = [], is_creation: bool = False, dict_response: bool = False):
+async def default_response(callable_function: Callable, params: list = [], is_creation: bool = False,
+                           dict_response: bool = False):
     try:
         if is_async_callable(callable_function):
             result = await callable_function(*params)
@@ -29,7 +30,8 @@ async def default_response(callable_function: Callable, params: list = [], is_cr
         return {"status": False, "message": "Erro interno com o servidor."}
 
 
-def update_default_dict(data: dict, json_targets: list[str] = [], decimal_targets: list[str] = [], date_targets: list[str] = []):
+def update_default_dict(data: dict, json_targets: list[str] = [], decimal_targets: list[str] = [],
+                        date_targets: list[str] = []):
     new_data = {**data}
 
     if "createdAt" in new_data.keys():

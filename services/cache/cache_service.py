@@ -12,8 +12,10 @@ async def get_items_by_key(key: str, redis_client: redis.asyncio.Redis) -> dict 
             return False
     return False
 
+
 async def create_items_by_key(key: str, time: int, item: dict, redis_client: redis.asyncio.Redis) -> None:
     await redis_client.setex(key, time, json.dumps(item, default=str))
+
 
 async def clear_items_by_key(key: str, redis_client: redis.asyncio.Redis) -> None:
     await redis_client.delete(key)

@@ -56,7 +56,8 @@ def verify_google_token(token: str) -> dict | None:
         return None
 
 
-async def verify_token(token: str, conn, check_can_update: bool = False, expected_type: str = "auth") -> dict | bool | None:
+async def verify_token(token: str, conn, check_can_update: bool = False,
+                       expected_type: str = "auth") -> dict | bool | None:
     try:
 
         if token.startswith("Bearer "):
@@ -91,7 +92,8 @@ async def verify_token(token: str, conn, check_can_update: bool = False, expecte
         return False
 
 
-async def validate_token(request: Request, conn, check_can_update: bool = False, reset_cookie: bool = False, expected_type: str = "auth") -> dict:
+async def validate_token(request: Request, conn, check_can_update: bool = False, reset_cookie: bool = False,
+                         expected_type: str = "auth") -> dict:
     try:
         cookie_key = "auth" if not reset_cookie else "auth_reset"
         token = request.cookies.get(cookie_key)

@@ -123,10 +123,10 @@ async def google_login(conn, data: LoginGoogleRequestModel) -> dict:
 
 async def forget_password(conn, clientmq, redis_client, data: ForgetPasswordRequestModel) -> dict:
     select_query = """
-        SELECT id, email
-        FROM users
-        WHERE email = $1 \
-    """
+                   SELECT id, email
+                   FROM users
+                   WHERE email = $1 \
+                   """
 
     try:
         row = await conn.fetchrow(select_query, data.email)
@@ -135,7 +135,7 @@ async def forget_password(conn, clientmq, redis_client, data: ForgetPasswordRequ
             return {"status": False, "message": "If the email exists, a reset code was sent"}
 
         code = utils.generate_temp_code()
-        await cache_service.create_items_by_key(f"{row["id"]}:{data.email}",600, {"code": code},redis_client)
+        await cache_service.create_items_by_key(f"{row["id"]}:{data.email}", 600, {"code": code}, redis_client)
 
         payload = {
             "to": data.email,

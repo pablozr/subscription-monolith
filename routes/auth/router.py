@@ -69,7 +69,7 @@ async def google_login(data: LoginGoogleRequestModel, conn=Depends(postgresql.ge
         return JSONResponse(status_code=500, content={"detail": "An error occurred during Google login"})
 
 
-@router.post("/logout", dependencies= [Depends(security.validate_token_wrapper)])
+@router.post("/logout", dependencies=[Depends(security.validate_token_wrapper)])
 async def logout():
     try:
         payload = JSONResponse(status_code=200, content={"message": "Successfully logged out"})
@@ -86,7 +86,7 @@ async def forget_password(
         data: ForgetPasswordRequestModel, conn=Depends(postgresql.get_db),
         clientmq=Depends(rabbitmq.get_channel), redis_client=Depends(redis_cache.get_redis)
 
-        ):
+):
     try:
         response = await auth_service.forget_password(conn, clientmq, redis_client, data)
 
