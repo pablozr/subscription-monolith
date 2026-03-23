@@ -171,3 +171,7 @@ async def forget_password(conn: asyncpg.Connection, clientmq, redis_client, data
     except Exception as e:
         logger.error(e)
         return {"status": False, "message": "An error occurred during sending email "}
+
+
+async def validate_code():
+    pass

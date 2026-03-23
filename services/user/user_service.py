@@ -52,3 +52,11 @@ async def create_user(conn: asyncpg.Connection, data: UserCreateRequest) -> dict
     except Exception as e:
         logger.error(e)
         return {"status": False, "message": "An error occurred while creating user"}
+
+
+async def update_user_auto():
+    pass
+
+
+async def update_password():
+    pass
