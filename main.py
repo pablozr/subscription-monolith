@@ -5,6 +5,7 @@ from core.redis.redis import redis_cache
 from core.rabbitmq.rabbitmq import rabbitmq
 from fastapi import FastAPI
 from routes.auth.router import router as auth_router
+from routes.users.router import router as users_router
 # from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
@@ -23,7 +24,7 @@ async def lifespan(app: FastAPI):
     await rabbitmq.disconnect()
     print("✅ Todos os serviços desconectados com sucesso!")
 
-app = FastAPI(lifespan=lifespan, openapi_url="/api/v1/subreminders/openapi.json", root_path="/api/v1/subreminders")
+app = FastAPI(lifespan=lifespan, openapi_url="/api/v1/subreminders/openapi.json") #root_path="/api/v1/subreminders")
 
 # app.add_middleware(
 #     CORSMiddleware,
@@ -41,6 +42,7 @@ async def custom_docs():
     )
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(users_router, prefix="/users", tags=["users"])
 
 if __name__ == "__main__":
     import uvicorn

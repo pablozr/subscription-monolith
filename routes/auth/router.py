@@ -84,14 +84,14 @@ async def logout():
 async def forget_password(
 
         data: ForgetPasswordRequestModel, conn=Depends(postgresql.get_db),
-        clientmq=Depends(rabbitmq.get_rabbitmq), redis_client=Depends(redis_cache.get_redis_client)
+        clientmq=Depends(rabbitmq.get_channel), redis_client=Depends(redis_cache.get_redis)
 
         ):
     try:
         response = await auth_service.forget_password(conn, clientmq, redis_client, data)
 
         if not response["status"]:
-            return JSONResponse(status_code=400, content={"detail": response["message"]})
+            return JSONResponse(status_code=200, content={"detail": response["message"]})
 
         token = response["data"]["access_token"]
         response["data"].pop("access_token", None)
