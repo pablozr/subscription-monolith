@@ -1,6 +1,8 @@
 import secrets
 from datetime import timedelta
 
+import asyncpg
+
 from schemas.auth import LoginRequestModel, LoginGoogleRequestModel, ForgetPasswordRequestModel
 from core.security import security
 from core.logger.logger import logger
@@ -12,7 +14,7 @@ from services.messaging import messaging_service
 from templates.email import master_forget_password_email_template
 
 
-async def login(conn, login_data: LoginRequestModel) -> dict:
+async def login(conn: asyncpg.Connection, login_data: LoginRequestModel) -> dict:
     select_query = """
                    SELECT id, email, fullname, role, password
                    FROM users
@@ -57,7 +59,7 @@ async def login(conn, login_data: LoginRequestModel) -> dict:
         return {"status": False, "message": "An error occurred during login"}
 
 
-async def google_login(conn, data: LoginGoogleRequestModel) -> dict:
+async def google_login(conn: asyncpg.Connection, data: LoginGoogleRequestModel) -> dict:
     select_query = """
                    SELECT id, email, fullname, role
                    FROM users
@@ -121,7 +123,7 @@ async def google_login(conn, data: LoginGoogleRequestModel) -> dict:
         return {"status": False, "message": "An error occurred during login"}
 
 
-async def forget_password(conn, clientmq, redis_client, data: ForgetPasswordRequestModel) -> dict:
+async def forget_password(conn: asyncpg.Connection, clientmq, redis_client, data: ForgetPasswordRequestModel) -> dict:
     select_query = """
                    SELECT id, email
                    FROM users

@@ -1,9 +1,11 @@
+import asyncpg
+
 from schemas.user import UserGetResponse, UserCreateRequest
 from core.security import security
 from core.logger.logger import logger
 
 
-async def get_one_user(conn, user_id: int) -> UserGetResponse:
+async def get_one_user(conn: asyncpg.Connection, user_id: int) -> UserGetResponse:
     query = "SELECT id, email FROM users WHERE id = $1"
 
     row = await conn.fetchrow(query, user_id)
@@ -23,28 +25,30 @@ async def get_one_user(conn, user_id: int) -> UserGetResponse:
     }
 
 
-async def create_user(conn, data: UserCreateRequest) -> dict:
+async def create_user(conn: asyncpg.Connection, data: UserCreateRequest) -> dict:
     insert_query = """
                    INSERT INTO users (email, password, fullname, role, created_at)
                    VALUES ($1, $2, $3, 'BASIC', NOW()) RETURNING id, email, fullname, role
                    """
 
     try:
-        hashed_password = security.hash_password(data.password)
+        async with conn.transaction():
 
-        response = await conn.fetchrow(insert_query, data.email, hashed_password, data.fullname)
+            hashed_password = security.hash_password(data.password)
 
-        if not response:
-            return {"status": False, "message": "Failed to create user"}
+            response = await conn.fetchrow(insert_query, data.email, hashed_password, data.fullname)
 
-        return {"status": True, "message": "User created successfully", "data": {
-            "user": {
-                "userId": response["id"],
-                "email": response["email"],
-                "fullname": response["fullname"],
-                "role": response["role"]
-            }
-        }}
+            if not response:
+                return {"status": False, "message": "Failed to create user"}
+
+            return {"status": True, "message": "User created successfully", "data": {
+                "user": {
+                    "userId": response["id"],
+                    "email": response["email"],
+                    "fullname": response["fullname"],
+                    "role": response["role"]
+                }
+            }}
     except Exception as e:
         logger.error(e)
         return {"status": False, "message": "An error occurred while creating user"}
