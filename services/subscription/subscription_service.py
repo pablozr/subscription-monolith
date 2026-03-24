@@ -19,7 +19,7 @@ async def get_all_subscriptions(conn: asyncpg.Connection, user_id: int) -> dict:
         rows = await conn.fetch(query, user_id)
         subscriptions = [
             update_default_dict(
-                dict(row),
+                {**row},
                 decimal_targets=["price"],
                 date_targets=["start_date", "next_payment_date"]
             ) for row in rows
@@ -50,7 +50,7 @@ async def get_one_subscription(conn: asyncpg.Connection, subscription_id: int, u
             return {"status": False, "message": "Subscription not found", "data": {}}
 
         subscription = update_default_dict(
-            dict(row),
+            {**row},
             decimal_targets=["price"],
             date_targets=["start_date", "next_payment_date"]
         )
@@ -89,7 +89,7 @@ async def create_subscription(conn: asyncpg.Connection, user_id: int, data: Subs
                 return {"status": False, "message": "Failed to create subscription", "data": {}}
 
             subscription = update_default_dict(
-                dict(row),
+                {**row},
                 decimal_targets=["price"],
                 date_targets=["start_date", "next_payment_date"]
             )
@@ -136,7 +136,7 @@ async def update_subscription(conn: asyncpg.Connection, subscription_id: int, us
                 return {"status": False, "message": "Subscription not found", "data": {}}
 
             subscription = update_default_dict(
-                dict(row),
+                {**row},
                 decimal_targets=["price"],
                 date_targets=["start_date", "next_payment_date"]
             )

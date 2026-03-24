@@ -1,23 +1,43 @@
 from fastapi import APIRouter, Depends
-from starlette.responses import JSONResponse
-from core.logger.logger import logger
 from core.postgresql.postgresql import postgresql
-from schemas.user import UserCreateRequest
-from services.user import user_service
 from core.security import security
+from schemas.user import UserCreateRequest, UserUpdateRequest
+from services.user import user_service
+from functions.utils.utils import default_response
 
 router = APIRouter()
 
 
-@router.post("", dependencies=[Depends(security.validate_token_wrapper)])
-async def create_user(data: UserCreateRequest, conn=Depends(postgresql.get_db)):
-    try:
-        response = await user_service.create_user(conn, data)
+@router.get("/me")
+async def get_me(
+    user=Depends(security.validate_token_wrapper),
+    conn=Depends(postgresql.get_db)
+):
+    return await default_response(
+        user_service.get_one_user,
+        [conn, user["id"]]
+    )
 
-        if not response["status"]:
-            return JSONResponse(status_code=400, content={"detail": "An error occurred. Please try again"})
 
-        return JSONResponse(status_code=200, content={"message": "User created successfully"})
-    except Exception as e:
-        logger.error(e)
-        return JSONResponse(status_code=500, content={"detail": "An error occurred. Please try again"})
+@router.put("/me")
+async def update_me(
+    data: UserUpdateRequest,
+    user=Depends(security.validate_token_wrapper),
+    conn=Depends(postgresql.get_db)
+):
+    return await default_response(
+        user_service.update_user_auto,
+        [conn, user["id"], data]
+    )
+
+
+@router.post("")
+async def create_user(
+    data: UserCreateRequest,
+    conn=Depends(postgresql.get_db)
+):
+    return await default_response(
+        user_service.create_user,
+        [conn, data],
+        is_creation=True
+    )

@@ -1,13 +1,13 @@
 import asyncpg
 from asyncpg.exceptions import UniqueViolationError
 
-from schemas.user import UserGetResponse, UserCreateRequest
+from schemas.user import UserGetResponse, UserCreateRequest, UserUpdateRequest
 from core.security import security
 from core.logger.logger import logger
 
 
 async def get_one_user(conn: asyncpg.Connection, user_id: int) -> UserGetResponse:
-    query = "SELECT id, email FROM users WHERE id = $1"
+    query = "SELECT id, email, fullname, role FROM users WHERE id = $1"
 
     row = await conn.fetchrow(query, user_id)
 
@@ -19,8 +19,11 @@ async def get_one_user(conn: asyncpg.Connection, user_id: int) -> UserGetRespons
         "message": "User retrieved successfully",
         "data": {
             "user": {
-                "user_id": row["id"],
-                "email": row["email"]
+                "id": row["id"],
+                "userId": row["id"],
+                "email": row["email"],
+                "fullname": row["fullname"],
+                "role": row["role"]
             }
         }
     }
@@ -57,10 +60,9 @@ async def create_user(conn: asyncpg.Connection, data: UserCreateRequest) -> dict
         return {"status": False, "message": "An error occurred while creating user"}
 
 
-async def update_user_auto(conn: asyncpg.Connection, user_id: int, data: dict) -> dict:
+async def update_user_auto(conn: asyncpg.Connection, user_id: int, data: UserUpdateRequest) -> dict:
     allowed_columns = {"fullname", "email"}
-    filtered = {k: v for k, v in data.items(
-    ) if k in allowed_columns and v is not None}
+    filtered = {k: v for k, v in data.model_dump(exclude_none=True).items() if k in allowed_columns}
 
     if not filtered:
         return {"status": False, "message": "No fields to update", "data": {}}
@@ -79,10 +81,13 @@ async def update_user_auto(conn: asyncpg.Connection, user_id: int, data: dict) -
             if not response:
                 return {"status": False, "message": "Failed to update user", "data": {}}
 
+            user = {**response}
+            user["userId"] = user["id"]
+
             return {
                 "status": True,
                 "message": "User updated successfully",
-                "data": {"user": response}
+                "data": {"user": user}
             }
     except UniqueViolationError:
         return {"status": False, "message": "Email already in use", "data": {}}

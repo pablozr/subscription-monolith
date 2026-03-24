@@ -18,3 +18,8 @@ class UserCreateRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     fullname: str = Field(min_length=8)
+
+
+class UserUpdateRequest(BaseModel):
+    email: EmailStr | None = None
+    fullname: str | None = Field(default=None, min_length=8)
