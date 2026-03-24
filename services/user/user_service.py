@@ -1,4 +1,5 @@
 import asyncpg
+from asyncpg.exceptions import UniqueViolationError
 
 from schemas.user import UserGetResponse, UserCreateRequest
 from core.security import security
@@ -49,14 +50,59 @@ async def create_user(conn: asyncpg.Connection, data: UserCreateRequest) -> dict
                     "role": response["role"]
                 }
             }}
+    except UniqueViolationError:
+        return {"status": False, "message": "Email already in use", "data": {}}
     except Exception as e:
         logger.error(e)
         return {"status": False, "message": "An error occurred while creating user"}
 
 
-async def update_user_auto():
-    pass
+async def update_user_auto(conn: asyncpg.Connection, user_id: int, data: dict) -> dict:
+    allowed_columns = {"fullname", "email"}
+    filtered = {k: v for k, v in data.items(
+    ) if k in allowed_columns and v is not None}
+
+    if not filtered:
+        return {"status": False, "message": "No fields to update", "data": {}}
+
+    columns = list(filtered.keys())
+    values = list(filtered.values())
+    set_clause = ", ".join(f"{col} = ${i}" for i, col in enumerate(columns, 1))
+    values.append(user_id)
+
+    update_query = f"UPDATE users SET {set_clause}, updated_at = NOW() WHERE id = ${len(values)} RETURNING id, email, fullname, role"
+
+    try:
+        async with conn.transaction():
+            response = await conn.fetchrow(update_query, *values)
+
+            if not response:
+                return {"status": False, "message": "Failed to update user", "data": {}}
+
+            return {
+                "status": True,
+                "message": "User updated successfully",
+                "data": {"user": response}
+            }
+    except UniqueViolationError:
+        return {"status": False, "message": "Email already in use", "data": {}}
+    except Exception as e:
+        logger.error(e)
+        return {"status": False, "message": "An error occurred while updating user", "data": {}}
 
 
-async def update_password():
-    pass
+async def update_password(conn: asyncpg.Connection, user_id: int, new_password: str) -> dict:
+    update_query = """
+                   UPDATE users SET password = $1, updated_at = NOW()
+                   WHERE id = $2
+                   """
+
+    try:
+        async with conn.transaction():
+            hashed_password = security.hash_password(new_password)
+            await conn.execute(update_query, hashed_password, user_id)
+
+            return {"status": True, "message": "Password updated successfully", "data": {}}
+    except Exception as e:
+        logger.error(e)
+        return {"status": False, "message": "An error occurred while updating password", "data": {}}

@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends
 from starlette.responses import JSONResponse
 from core.logger.logger import logger
-from schemas.auth import LoginRequestModel, LoginGoogleRequestModel, ForgetPasswordRequestModel
+from schemas.auth import LoginRequestModel, LoginGoogleRequestModel, ForgetPasswordRequestModel, ValidateCodeRequest, UpdatePasswordRequest
 from services.auth import auth_service
+from services.user import user_service
 from core.postgresql.postgresql import postgresql
 from core.security import security
 from core.rabbitmq.rabbitmq import rabbitmq
 from core.redis.redis import redis_cache
+
 
 router = APIRouter()
 
@@ -111,3 +113,56 @@ async def forget_password(
     except Exception as e:
         logger.error(e)
         return JSONResponse(status_code=500, content={"detail": "An error occurred during forget password"})
+
+
+@router.post("/validate-code")
+async def validate_code(
+    data: ValidateCodeRequest,
+    user=Depends(security.validate_token_to_validate_code),
+    redis_client=Depends(redis_cache.get_redis)
+):
+    try:
+        response = await auth_service.validate_code(redis_client, data.code, user)
+
+        if not response["status"]:
+            return JSONResponse(status_code=400, content={"detail": response["message"]})
+
+        token = response["data"]["access_token"]
+        response["data"].pop("access_token", None)
+
+        resp = JSONResponse(status_code=200, content={"message": response["message"]})
+        resp.set_cookie(
+            key="auth_reset",
+            value=token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            path="/",
+            max_age=900,
+        )
+
+        return resp
+    except Exception as e:
+        logger.error(e)
+        return JSONResponse(status_code=500, content={"detail": "An error occurred during code validation"})
+
+
+@router.post("/update-password")
+async def update_password(
+    data: UpdatePasswordRequest,
+    user=Depends(security.validate_token_to_update_password),
+    conn=Depends(postgresql.get_db)
+):
+    try:
+        response = await user_service.update_password(conn, user["id"], data.password)
+
+        if not response["status"]:
+            return JSONResponse(status_code=400, content={"detail": response["message"]})
+
+        resp = JSONResponse(status_code=200, content={"message": response["message"]})
+        resp.delete_cookie("auth_reset")
+
+        return resp
+    except Exception as e:
+        logger.error(e)
+        return JSONResponse(status_code=500, content={"detail": "An error occurred during password update"})

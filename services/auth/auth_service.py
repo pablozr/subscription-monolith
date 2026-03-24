@@ -136,7 +136,8 @@ async def forget_password(conn: asyncpg.Connection, clientmq, redis_client, data
             return {"status": False, "message": "If the email exists, a reset code was sent"}
 
         code = utils.generate_temp_code()
-        await cache_service.create_items_by_key(f"{row["id"]}:{data.email}", 600, {"code": code}, redis_client)
+        cache_key = f'{row["id"]}:{data.email}'
+        await cache_service.create_items_by_key(cache_key, 600, {"code": code}, redis_client)
 
         payload = {
             "to": data.email,
@@ -172,24 +173,27 @@ async def forget_password(conn: asyncpg.Connection, clientmq, redis_client, data
         return {"status": False, "message": "An error occurred during sending email "}
 
 
-async def validate_code(redis_client: redis.asyncio.Redis , code: str, user: dict):
+async def validate_code(redis_client: redis.asyncio.Redis, code: str, user: dict):
     try:
-        redis_code = await cache_service.get_items_by_key(f"{user["id"]}:{user["email"]}", redis_client)
+        cache_key = f'{user["id"]}:{user["email"]}'
+        redis_code = await cache_service.get_items_by_key(cache_key, redis_client)
 
         if not redis_code:
-            return {"status": False, "message": "Invalid user"}
-        
-        if code != redis_code:
-            return{"status": False, "message": "Invalid code"}
+            return {"status": False, "message": "Invalid user", "data": {}}
+
+        if code != redis_code.get("code"):
+            return {"status": False, "message": "Invalid code", "data": {}}
         
         access_token = security.create_access_token(
-             {
+            {
                 "userId": user["id"],
                 "email": user["email"],
                 "canUpdate": True,
                 "type": "reset"
             }, timedelta(minutes=10)
         )
+
+        await cache_service.clear_items_by_key(cache_key, redis_client)
 
         return {
             "status": True,
@@ -200,4 +204,4 @@ async def validate_code(redis_client: redis.asyncio.Redis , code: str, user: dic
         }
     except Exception as e:
         logger.error(e)
-        return {"status": False, "message": "Internal server error"}
+        return {"status": False, "message": "Internal server error", "data": {}}
