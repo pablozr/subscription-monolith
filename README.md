@@ -11,7 +11,8 @@ Back-end monolith built with **FastAPI** and **Python 3.12+** for managing perso
 - [Project Structure](#project-structure)
 - [Infrastructure](#infrastructure)
 - [Authentication and Security](#authentication-and-security)
-- [Current Status](#current-status)
+- [API Routes](#api-routes)
+- [Workers](#workers)
 - [Environment Variables](#environment-variables)
 - [Getting Started](#getting-started)
 - [API Documentation](#api-documentation)
@@ -40,6 +41,7 @@ The project follows a modular monolith architecture. Each domain (auth, users, s
 - **Async-first I/O** across all external service connections (database, cache, message broker).
 - **Clear separation of concerns** through dedicated layers for routing, business logic, data validation, and infrastructure.
 - **Message-driven background processing** via RabbitMQ workers for email delivery and scheduled tasks, keeping API response times fast.
+- **No ORM** -- all database access uses raw parameterized SQL through asyncpg for full control and performance.
 
 ---
 
@@ -63,59 +65,61 @@ The project follows a modular monolith architecture. Each domain (auth, users, s
 
 ```
 subscription-monolith/
-|-- main.py                     # Application entrypoint and lifespan management
-|-- requirements.txt            # Python dependencies
-|-- .env                        # Environment variables (not versioned)
+|-- main.py                          # Application entrypoint and lifespan management
+|-- requirements.txt                 # Python dependencies
+|-- .env.example                     # Environment variables template
 |
-|-- core/                       # Infrastructure and cross-cutting concerns
-|   |-- config/config.py        # Centralized settings via pydantic-settings
-|   |-- postgresql/postgresql.py# Async connection pool (asyncpg)
-|   |-- redis/redis.py          # Async Redis client wrapper
-|   |-- rabbitmq/rabbitmq.py    # Async RabbitMQ connection (aio-pika)
-|   |-- security/security.py    # JWT, bcrypt, Google OAuth2, role-based access
-|   |-- logger/logger.py        # Structured logging configuration
+|-- core/                            # Infrastructure and cross-cutting concerns
+|   |-- config/config.py             # Centralized settings via pydantic-settings
+|   |-- postgresql/postgresql.py     # Async connection pool singleton (asyncpg)
+|   |-- redis/redis.py              # Async Redis client singleton
+|   |-- rabbitmq/rabbitmq.py        # Async RabbitMQ connection singleton (aio-pika)
+|   |-- security/security.py        # JWT, bcrypt, Google OAuth2, role-based access
+|   |-- logger/logger.py            # Structured logging configuration
 |
-|-- routes/                     # HTTP route definitions (controllers)
-|   |-- auth/router.py          # Login and Google OAuth endpoints
-|   |-- users/router.py         # User management endpoints
-|   |-- subscription/router.py  # Subscription management endpoints
+|-- routes/                          # HTTP route definitions
+|   |-- auth/router.py              # Login, Google login, logout, password reset flow
+|   |-- users/router.py             # User profile (GET /me, PUT /me, POST)
+|   |-- subscription/router.py      # Subscription CRUD + cancel
 |
-|-- services/                   # Business logic layer
-|   |-- auth/auth_service.py    # Authentication logic (credentials + Google)
-|   |-- user/user_service.py    # User CRUD operations
-|   |-- subscription/           # Subscription business logic
-|   |-- cache/cache_service.py  # Redis get/set/delete operations
+|-- services/                        # Business logic layer
+|   |-- auth/auth_service.py        # Authentication logic (credentials + Google)
+|   |-- user/user_service.py        # User CRUD operations
+|   |-- subscription/subscription_service.py  # Subscription CRUD operations
+|   |-- cache/cache_service.py      # Redis get/set/delete with JSON serialization
 |   |-- messaging/messaging_service.py  # RabbitMQ message publishing
 |
-|-- schemas/                    # Pydantic models for request/response validation
-|   |-- auth.py                 # Login request models
-|   |-- user.py                 # User request/response models
-|   |-- subscription.py         # Subscription models
+|-- schemas/                         # Pydantic models for request/response validation
+|   |-- auth.py                     # Login, forgot password, validate code, update password
+|   |-- user.py                     # User create, update, response types
+|   |-- subscription.py             # Subscription create, update, response types
 |
-|-- workers/                    # Background workers (message consumers)
-|   |-- smtp/email_worker.py    # Email delivery worker
-|   |-- schedule/               # Scheduled tasks
+|-- workers/                         # Background workers (standalone processes)
+|   |-- smtp/email_worker.py        # RabbitMQ consumer for email delivery via SMTP
+|   |-- schedule/renewal_reminder.py # Scheduled renewal reminder checker
 |
-|-- templates/                  # Email templates
-|   |-- email.py                # HTML email template definitions
+|-- templates/                       # Email templates
+|   |-- email.py                    # HTML email templates with placeholder tokens
 |
-|-- functions/                  # Shared utilities
-    |-- utils/utils.py          # Response helpers, data serialization
+|-- functions/                       # Shared utilities
+    |-- utils/utils.py              # Response wrappers, data serialization helpers
 ```
+
+Every module folder contains an `__init__.py` file.
 
 ---
 
 ## Infrastructure
 
-All external service connections are managed through dedicated modules inside `core/` and share a consistent lifecycle pattern: they initialize on application startup and close gracefully on shutdown, controlled by FastAPI's `lifespan` context manager.
+All external service connections are managed through singleton classes inside `core/` and share a consistent lifecycle pattern: they initialize on application startup and close gracefully on shutdown, controlled by FastAPI's `lifespan` context manager.
 
 ### PostgreSQL
 
-Async connection pool via `asyncpg`. Connections are injected into route handlers through FastAPI's dependency injection system (`Depends`). The pool is configured with a minimum of 1 and maximum of 3 connections.
+Async connection pool via `asyncpg`. Connections are injected into route handlers through FastAPI's dependency injection (`Depends`). The pool is configured with a minimum of 1 and maximum of 3 connections. All queries use raw parameterized SQL with positional placeholders (`$1, $2, $3`).
 
 ### Redis
 
-Async client via `redis-py`. Used as the caching layer through a generic key-value service (`cache_service.py`) that supports JSON serialization, TTL-based expiration, and on-demand invalidation.
+Async client via `redis-py`. Used as the caching layer through a generic key-value service (`cache_service.py`) that supports JSON serialization, TTL-based expiration, and on-demand invalidation. Currently used for storing temporary password reset codes.
 
 ### RabbitMQ
 
@@ -136,75 +140,108 @@ The security module (`core/security/security.py`) provides:
 - **Google OAuth2** token verification for social login, with automatic user provisioning on first login.
 - **Cookie-based session management** using HttpOnly, Secure, SameSite=Lax cookies.
 - **Role-based access control** with a rank hierarchy (BASIC, ADMIN) and configurable minimum-rank middleware.
-- **Password reset flow** with a multi-step token validation process (email verification code, then password update).
+
+### Password Reset Flow
+
+A complete multi-step flow using Redis for temporary codes and two-phase JWT tokens:
+
+1. `POST /auth/forget-password` -- generates a 6-digit code, stores it in Redis (TTL 600s), publishes an email via RabbitMQ, and returns a JWT with `canUpdate: false` in an `auth_reset` cookie.
+2. `POST /auth/validate-code` -- validates the code against Redis. If correct, clears the Redis key and returns a new JWT with `canUpdate: true`.
+3. `POST /auth/update-password` -- requires the `canUpdate: true` token. Updates the password and clears the `auth_reset` cookie.
 
 ---
 
-## Current Status
+## API Routes
 
-The table below summarizes the implementation progress of each module:
+### Auth (`/auth`)
 
-| Module                | Status         | Notes                                                  |
-| --------------------- | -------------- | ------------------------------------------------------ |
-| Core Infrastructure   | Complete       | PostgreSQL, Redis, RabbitMQ, Config, Logger             |
-| Security              | Complete       | JWT, bcrypt, Google OAuth2, role-based access           |
-| Auth Routes           | Complete       | Login (credentials), Login (Google)                     |
-| Auth Service          | Complete       | Credential validation, Google token verification        |
-| User Service          | Complete       | User creation and retrieval                             |
-| Cache Service         | Complete       | Generic key-value operations with TTL                   |
-| Messaging Service     | Complete       | RabbitMQ message publishing                             |
-| Utility Functions     | Complete       | Response wrappers, data serialization helpers            |
-| Subscription Routes   | Scaffolded     | File structure created, implementation pending           |
-| Subscription Service  | Scaffolded     | File structure created, implementation pending           |
-| User Routes           | Scaffolded     | File structure created, implementation pending           |
-| Email Worker          | Scaffolded     | File structure created, implementation pending           |
-| Email Templates       | Scaffolded     | File structure created, implementation pending           |
-| Scheduled Workers     | Scaffolded     | File structure created, implementation pending           |
+| Method | Endpoint             | Auth     | Description                                  |
+| ------ | -------------------- | -------- | -------------------------------------------- |
+| POST   | `/login`             | Public   | Login with email and password                |
+| POST   | `/google/login`      | Public   | Login with Google OAuth2 token               |
+| POST   | `/logout`            | Required | Logout and clear auth cookie                 |
+| POST   | `/forget-password`   | Public   | Request password reset code via email        |
+| POST   | `/validate-code`     | Reset    | Validate the 6-digit reset code              |
+| POST   | `/update-password`   | Reset    | Set new password (requires validated code)   |
+
+### Users (`/users`)
+
+| Method | Endpoint | Auth     | Description                          |
+| ------ | -------- | -------- | ------------------------------------ |
+| GET    | `/me`    | Required | Get authenticated user profile       |
+| PUT    | `/me`    | Required | Update email and/or fullname         |
+| POST   | `/`      | Required | Create a new user                    |
+
+### Subscriptions (`/subscriptions`)
+
+| Method | Endpoint              | Auth     | Description                              |
+| ------ | --------------------- | -------- | ---------------------------------------- |
+| GET    | `/`                   | Required | List all subscriptions for the user      |
+| GET    | `/{id}`               | Required | Get a specific subscription              |
+| POST   | `/`                   | Required | Create a new subscription                |
+| PUT    | `/{id}`               | Required | Update subscription fields               |
+| PATCH  | `/{id}/cancel`        | Required | Cancel a subscription (sets CANCELED)    |
+| DELETE | `/{id}`               | Required | Permanently delete a subscription        |
+
+All user-owned data queries enforce IDOR protection via `AND user_id = $X`.
+
+---
+
+## Workers
+
+Workers run as **standalone processes**, separate from the FastAPI application. They reuse the singleton classes from `core/` for their own connections.
+
+### Email Worker
+
+Consumes messages from the `email-queue` RabbitMQ queue and sends emails via SMTP. Supports HTML content and base64 attachments.
+
+```bash
+python -m workers.smtp.email_worker
+```
+
+### Renewal Reminder
+
+Scheduled job that queries active subscriptions approaching their next payment date (based on `reminder_days_before`) and publishes reminder emails to the `email-queue`.
+
+```bash
+python -m workers.schedule.renewal_reminder
+```
 
 ---
 
 ## Environment Variables
 
-Create a `.env` file at the project root with the following variables:
+Create a `.env` file at the project root. Use `.env.example` as a template:
 
-```env
-# Application
-ENVIRONMENT=development
-API_PORT=8000
-
-# PostgreSQL
-DB_HOST=
-DB_PORT=5432
-DB_USER=
-DB_PASSWORD=
-DB_NAME=
-
-# RabbitMQ
-RABBITMQ_HOST=
-RABBITMQ_PORT=5672
-RABBITMQ_USER=
-RABBITMQ_PASSWORD=
-
-# Redis
-REDIS_HOST=
-REDIS_PORT=6379
-REDIS_PASSWORD=
-
-# JWT
-SECRET_KEY=
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
-
-# SMTP
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASSWORD=
-EMAIL_FROM=
-
-# Google OAuth
-GOOGLE_CLIENT_ID=
+```bash
+cp .env.example .env
 ```
+
+| Variable                     | Description                          | Default       |
+| ---------------------------- | ------------------------------------ | ------------- |
+| `ENVIRONMENT`                | Runtime environment                  | `development` |
+| `API_PORT`                   | Server port                          | `8000`        |
+| `DB_HOST`                    | PostgreSQL host                      | --            |
+| `DB_PORT`                    | PostgreSQL port                      | `5432`        |
+| `DB_USER`                    | PostgreSQL user                      | --            |
+| `DB_PASSWORD`                | PostgreSQL password                  | --            |
+| `DB_NAME`                    | PostgreSQL database name             | --            |
+| `RABBITMQ_HOST`              | RabbitMQ host                        | --            |
+| `RABBITMQ_PORT`              | RabbitMQ port                        | `5672`        |
+| `RABBITMQ_USER`              | RabbitMQ user                        | --            |
+| `RABBITMQ_PASSWORD`          | RabbitMQ password                    | --            |
+| `REDIS_HOST`                 | Redis host                           | --            |
+| `REDIS_PORT`                 | Redis port                           | `6379`        |
+| `REDIS_PASSWORD`             | Redis password                       | `""`          |
+| `SECRET_KEY`                 | JWT signing key                      | --            |
+| `ALGORITHM`                  | JWT algorithm                        | `HS256`       |
+| `ACCESS_TOKEN_EXPIRE_MINUTES`| Token expiration in minutes          | `1440`        |
+| `SMTP_HOST`                  | SMTP server host                     | --            |
+| `SMTP_PORT`                  | SMTP server port                     | `587`         |
+| `SMTP_USER`                  | SMTP login user                      | --            |
+| `SMTP_PASSWORD`              | SMTP login password                  | --            |
+| `EMAIL_FROM`                 | Sender email address                 | --            |
+| `GOOGLE_CLIENT_ID`           | Google OAuth2 client ID              | --            |
 
 ---
 
@@ -237,11 +274,22 @@ cp .env.example .env
 # Edit .env with your service credentials
 ```
 
-### Running
+### Running the API
 
 ```bash
-# Development server
-uvicorn main:app --host 0.0.0.0 --port 5685 --reload
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Running the Workers
+
+In separate terminal sessions:
+
+```bash
+# Email delivery worker
+python -m workers.smtp.email_worker
+
+# Renewal reminder (run on a schedule via cron or task scheduler)
+python -m workers.schedule.renewal_reminder
 ```
 
 ---
@@ -250,7 +298,7 @@ uvicorn main:app --host 0.0.0.0 --port 5685 --reload
 
 Once the server is running, interactive API documentation is available at:
 
-- **Swagger UI**: `http://localhost:5685/api/v1/subreminders/docs`
+- **Swagger UI**: `http://localhost:8000/api/v1/subreminders/docs`
 
 ---
 
