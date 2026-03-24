@@ -174,7 +174,7 @@ async def forget_password(conn: asyncpg.Connection, clientmq, redis_client, data
 
 async def validate_code(redis_client: redis.asyncio.Redis , code: str, user: dict):
     try:
-        redis_code = await cache_service.get_items_by_key(user["id"], redis_client)
+        redis_code = await cache_service.get_items_by_key(f"{user["id"]}:{user["email"]}", redis_client)
 
         if not redis_code:
             return {"status": False, "message": "Invalid user"}
@@ -188,12 +188,12 @@ async def validate_code(redis_client: redis.asyncio.Redis , code: str, user: dic
                 "email": user["email"],
                 "canUpdate": True,
                 "type": "reset"
-            }
+            }, timedelta(minutes=10)
         )
 
         return {
             "status": True,
-            "message": "Valid code",
+            "message": "Ok",
             "data": {
                 "access_token": access_token,
             }
