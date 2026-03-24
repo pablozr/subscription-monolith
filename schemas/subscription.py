@@ -3,12 +3,14 @@ from typing import TypedDict
 from pydantic import BaseModel, Field, field_validator
 
 
+BILLING_CYCLE_VALUES = {"WEEKLY", "MONTHLY", "YEARLY"}
+
+
 class SubscriptionCreateRequest(BaseModel):
     name: str = Field(min_length=1)
     price: float = Field(gt=0)
     billing_cycle: str = Field(alias="billingCycle")
     start_date: date = Field(alias="startDate")
-    next_payment_date: date = Field(alias="nextPaymentDate")
     reminder_days_before: int = Field(alias="reminderDaysBefore", ge=0)
 
     model_config = {"populate_by_name": True}
@@ -16,7 +18,10 @@ class SubscriptionCreateRequest(BaseModel):
     @field_validator("billing_cycle")
     @classmethod
     def normalize_billing_cycle(cls, v: str) -> str:
-        return v.upper()
+        value = v.upper()
+        if value not in BILLING_CYCLE_VALUES:
+            raise ValueError(f"billing_cycle must be one of: {', '.join(BILLING_CYCLE_VALUES)}")
+        return value
 
 
 class SubscriptionUpdateRequest(BaseModel):
