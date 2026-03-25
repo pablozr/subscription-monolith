@@ -5,6 +5,10 @@
 # Ignore IDE configuration files
 .idea/
 
+# Local agent/IDE metadata (not versioned)
+.cursor/
+.agents/
+
 # Ignore __pycache__ directories
 **/__pycache__/
 
