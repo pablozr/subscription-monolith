@@ -34,7 +34,7 @@ async def get_all_subscriptions(conn: asyncpg.Connection, user_id: int) -> dict:
             update_default_dict(
                 {**row},
                 decimal_targets=["price"],
-                date_targets=["start_date", "next_payment_date"]
+                date_targets=["start_date", "next_payment_date", "canceled_at"]
             ) for row in rows
         ]
 
@@ -153,7 +153,7 @@ async def update_subscription(conn: asyncpg.Connection, subscription_id: int, us
             subscription = update_default_dict(
                 {**row},
                 decimal_targets=["price"],
-                date_targets=["start_date", "next_payment_date"]
+                date_targets=["start_date", "next_payment_date", "canceled_at"]
             )
 
             return {

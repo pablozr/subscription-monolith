@@ -40,7 +40,7 @@ async def create_user(conn: asyncpg.Connection, data: UserCreateRequest) -> dict
 
             hashed_password = security.hash_password(data.password)
 
-            response = await conn.fetchrow(insert_query, data.email, hashed_password, data.fullname)
+            response = await conn.fetchrow(insert_query, data.email, hashed_password, data.fullName)
 
             if not response:
                 return {"status": False, "message": "Failed to create user"}

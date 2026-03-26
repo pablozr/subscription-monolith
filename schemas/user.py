@@ -17,7 +17,7 @@ class UserGetResponse(TypedDict):
 class UserCreateRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
-    fullname: str = Field(min_length=8)
+    fullName: str = Field(min_length=8)
 
 
 class UserUpdateRequest(BaseModel):

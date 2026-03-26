@@ -32,7 +32,7 @@ app = FastAPI(lifespan=lifespan, openapi_url="/api/v1/subreminders/openapi.json"
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:4200"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
