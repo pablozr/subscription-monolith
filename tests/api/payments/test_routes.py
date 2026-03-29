@@ -5,6 +5,22 @@ from tests.api.helpers import ApiBaseTestCase, TEST_DB_CONN
 
 
 class PaymentHistoryApiTests(ApiBaseTestCase):
+    def test_create_payment_accepts_empty_body(self):
+        with patch(
+            "routes.payment_history.router.payment_history_service.create_payment",
+            new=AsyncMock(return_value={
+                "status": True,
+                "message": "Payment created",
+                "data": {"payment": {"id": 1}},
+            }),
+        ) as mocked_create:
+            response = self.client.post("/payments/subscriptions/10")
+
+        self.assertEqual(response.status_code, 201)
+
+        args = mocked_create.await_args_list[0].args
+        self.assertIs(args[3], None)
+
     def test_create_payment_returns_201(self):
         with patch(
             "routes.payment_history.router.payment_history_service.create_payment",
@@ -16,7 +32,7 @@ class PaymentHistoryApiTests(ApiBaseTestCase):
         ) as mocked_create:
             response = self.client.post(
                 "/payments/subscriptions/10",
-                json={"paymentMethod": "pix", "reference": "ref-1", "notes": "ok"},
+                json={"paymentMethod": "pix", "notes": "ok"},
             )
 
         self.assertEqual(response.status_code, 201)
@@ -25,6 +41,25 @@ class PaymentHistoryApiTests(ApiBaseTestCase):
         args = mocked_create.await_args_list[0].args
         self.assertIs(args[0], TEST_DB_CONN)
         self.assertEqual(args[1], 10)
+        self.assertEqual(args[2], 17)
+
+    def test_void_payment_returns_200(self):
+        with patch(
+            "routes.payment_history.router.payment_history_service.void_payment",
+            new=AsyncMock(return_value={
+                "status": True,
+                "message": "Payment voided",
+                "data": {"payment": {"id": 11, "status": "VOIDED"}},
+            }),
+        ) as mocked_void:
+            response = self.client.post("/payments/11/void")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["message"], "Payment voided")
+
+        args = mocked_void.await_args_list[0].args
+        self.assertIs(args[0], TEST_DB_CONN)
+        self.assertEqual(args[1], 11)
         self.assertEqual(args[2], 17)
 
     def test_get_subscription_payment_history_validates_limit(self):
