@@ -5,7 +5,7 @@ from schemas.auth import LoginRequestModel, LoginGoogleRequestModel, ForgetPassw
 from services.auth import auth_service
 from services.user import user_service
 from core.postgresql.postgresql import postgresql
-from core.security import security
+from core.security import security, rate_limit
 from core.rabbitmq.rabbitmq import rabbitmq
 from core.redis.redis import redis_cache
 
@@ -13,7 +13,7 @@ from core.redis.redis import redis_cache
 router = APIRouter()
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(rate_limit.rate_limit_login)])
 async def login(data: LoginRequestModel, conn=Depends(postgresql.get_db)):
     try:
         response = await auth_service.login(conn, data)
@@ -42,7 +42,7 @@ async def login(data: LoginRequestModel, conn=Depends(postgresql.get_db)):
         return JSONResponse(status_code=500, content={"detail": "An error occurred during login"})
 
 
-@router.post("/google/login")
+@router.post("/google/login", dependencies=[Depends(rate_limit.rate_limit_google_login)])
 async def google_login(data: LoginGoogleRequestModel, conn=Depends(postgresql.get_db)):
     try:
         response = await auth_service.google_login(conn, data)
@@ -75,14 +75,20 @@ async def google_login(data: LoginGoogleRequestModel, conn=Depends(postgresql.ge
 async def logout():
     try:
         payload = JSONResponse(status_code=200, content={"message": "Successfully logged out"})
-        payload.delete_cookie("auth")
+        payload.delete_cookie(
+            key="auth",
+            path="/",
+            secure=True,
+            httponly=True,
+            samesite="lax",
+        )
         return payload
     except Exception as e:
         logger.error(e)
         return JSONResponse(status_code=500, content={"detail": "An error occurred during logout"})
 
 
-@router.post("/forget-password")
+@router.post("/forget-password", dependencies=[Depends(rate_limit.rate_limit_forget_password)])
 async def forget_password(
 
         data: ForgetPasswordRequestModel, conn=Depends(postgresql.get_db),
@@ -115,7 +121,7 @@ async def forget_password(
         return JSONResponse(status_code=500, content={"detail": "An error occurred during forget password"})
 
 
-@router.post("/validate-code")
+@router.post("/validate-code", dependencies=[Depends(rate_limit.rate_limit_validate_code)])
 async def validate_code(
     data: ValidateCodeRequest,
     user=Depends(security.validate_token_to_validate_code),
@@ -154,13 +160,20 @@ async def update_password(
     conn=Depends(postgresql.get_db)
 ):
     try:
-        response = await user_service.update_password(conn, user["id"], data.password)
+        user_id = security.get_user_id(user)
+        response = await user_service.update_password(conn, user_id, data.password)
 
         if not response["status"]:
             return JSONResponse(status_code=400, content={"detail": response["message"]})
 
         resp = JSONResponse(status_code=200, content={"message": response["message"]})
-        resp.delete_cookie("auth_reset")
+        resp.delete_cookie(
+            key="auth_reset",
+            path="/",
+            secure=True,
+            httponly=True,
+            samesite="lax",
+        )
 
         return resp
     except Exception as e:

@@ -1,9 +1,19 @@
 import asyncpg
 from asyncpg.exceptions import UniqueViolationError
 
-from schemas.user import UserGetResponse, UserCreateRequest, UserUpdateRequest
+from schemas.user import UserGetDataResponse, UserGetResponse, UserCreateRequest, UserUpdateRequest
 from core.security import security
 from core.logger.logger import logger
+
+
+def build_user_payload(user_id: int, email: str, fullname: str, role: str) -> UserGetDataResponse:
+    user: UserGetDataResponse = {
+        "userId": user_id,
+        "email": email,
+        "fullname": fullname,
+        "role": role,
+    }
+    return user
 
 
 async def get_one_user(conn: asyncpg.Connection, user_id: int) -> UserGetResponse:
@@ -12,19 +22,18 @@ async def get_one_user(conn: asyncpg.Connection, user_id: int) -> UserGetRespons
     row = await conn.fetchrow(query, user_id)
 
     if not row:
-        return {"status": False, "message": "User not found", "data": dict()}
+        return {"status": False, "message": "User not found", "data": {}}
 
     return {
         "status": True,
         "message": "User retrieved successfully",
         "data": {
-            "user": {
-                "id": row["id"],
-                "userId": row["id"],
-                "email": row["email"],
-                "fullname": row["fullname"],
-                "role": row["role"]
-            }
+            "user": build_user_payload(
+                user_id=row["id"],
+                email=row["email"],
+                fullname=row["fullname"],
+                role=row["role"],
+            )
         }
     }
 
@@ -43,21 +52,21 @@ async def create_user(conn: asyncpg.Connection, data: UserCreateRequest) -> dict
             response = await conn.fetchrow(insert_query, data.email, hashed_password, data.fullName)
 
             if not response:
-                return {"status": False, "message": "Failed to create user"}
+                return {"status": False, "message": "Failed to create user", "data": {}}
 
             return {"status": True, "message": "User created successfully", "data": {
-                "user": {
-                    "userId": response["id"],
-                    "email": response["email"],
-                    "fullname": response["fullname"],
-                    "role": response["role"]
-                }
+                "user": build_user_payload(
+                    user_id=response["id"],
+                    email=response["email"],
+                    fullname=response["fullname"],
+                    role=response["role"],
+                )
             }}
     except UniqueViolationError:
         return {"status": False, "message": "Email already in use", "data": {}}
     except Exception as e:
         logger.error(e)
-        return {"status": False, "message": "An error occurred while creating user"}
+        return {"status": False, "message": "An error occurred while creating user", "data": {}}
 
 
 async def update_user_auto(conn: asyncpg.Connection, user_id: int, data: UserUpdateRequest) -> dict:
@@ -81,8 +90,12 @@ async def update_user_auto(conn: asyncpg.Connection, user_id: int, data: UserUpd
             if not response:
                 return {"status": False, "message": "Failed to update user", "data": {}}
 
-            user = {**response}
-            user["userId"] = user["id"]
+            user = build_user_payload(
+                user_id=response["id"],
+                email=response["email"],
+                fullname=response["fullname"],
+                role=response["role"],
+            )
 
             return {
                 "status": True,
@@ -100,12 +113,16 @@ async def update_password(conn: asyncpg.Connection, user_id: int, new_password: 
     update_query = """
                    UPDATE users SET password = $1, updated_at = NOW()
                    WHERE id = $2
+                   RETURNING id
                    """
 
     try:
         async with conn.transaction():
             hashed_password = security.hash_password(new_password)
-            await conn.execute(update_query, hashed_password, user_id)
+            row = await conn.fetchrow(update_query, hashed_password, user_id)
+
+            if not row:
+                return {"status": False, "message": "User not found", "data": {}}
 
             return {"status": True, "message": "Password updated successfully", "data": {}}
     except Exception as e:

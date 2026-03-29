@@ -13,9 +13,10 @@ async def get_me(
     user=Depends(security.validate_token_wrapper),
     conn=Depends(postgresql.get_db)
 ):
+    user_id = security.get_user_id(user)
     return await default_response(
         user_service.get_one_user,
-        [conn, user["id"]]
+        [conn, user_id]
     )
 
 
@@ -25,9 +26,10 @@ async def update_me(
     user=Depends(security.validate_token_wrapper),
     conn=Depends(postgresql.get_db)
 ):
+    user_id = security.get_user_id(user)
     return await default_response(
         user_service.update_user_auto,
-        [conn, user["id"], data]
+        [conn, user_id, data]
     )
 
 

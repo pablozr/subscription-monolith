@@ -15,3 +15,5 @@
 # Ignore temporary files
 *.tmp
 *.swp
+
+.opencode

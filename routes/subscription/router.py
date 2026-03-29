@@ -13,9 +13,10 @@ async def get_all_subscriptions(
     user=Depends(security.validate_token_wrapper),
     conn=Depends(postgresql.get_db)
 ):
+    user_id = security.get_user_id(user)
     return await default_response(
         subscription_service.get_all_subscriptions,
-        [conn, user["id"]]
+        [conn, user_id]
     )
 
 
@@ -25,9 +26,10 @@ async def get_one_subscription(
     user=Depends(security.validate_token_wrapper),
     conn=Depends(postgresql.get_db)
 ):
+    user_id = security.get_user_id(user)
     return await default_response(
         subscription_service.get_one_subscription,
-        [conn, subscription_id, user["id"]]
+        [conn, subscription_id, user_id]
     )
 
 
@@ -37,9 +39,10 @@ async def create_subscription(
     user=Depends(security.validate_token_wrapper),
     conn=Depends(postgresql.get_db)
 ):
+    user_id = security.get_user_id(user)
     return await default_response(
         subscription_service.create_subscription,
-        [conn, user["id"], data],
+        [conn, user_id, data],
         is_creation=True
     )
 
@@ -51,9 +54,10 @@ async def update_subscription(
     user=Depends(security.validate_token_wrapper),
     conn=Depends(postgresql.get_db)
 ):
+    user_id = security.get_user_id(user)
     return await default_response(
         subscription_service.update_subscription,
-        [conn, subscription_id, user["id"], data]
+        [conn, subscription_id, user_id, data]
     )
 
 
@@ -63,9 +67,10 @@ async def cancel_subscription(
     user=Depends(security.validate_token_wrapper),
     conn=Depends(postgresql.get_db)
 ):
+    user_id = security.get_user_id(user)
     return await default_response(
         subscription_service.cancel_subscription,
-        [conn, subscription_id, user["id"]]
+        [conn, subscription_id, user_id]
     )
 
 
@@ -75,7 +80,8 @@ async def delete_subscription(
     user=Depends(security.validate_token_wrapper),
     conn=Depends(postgresql.get_db)
 ):
+    user_id = security.get_user_id(user)
     return await default_response(
         subscription_service.delete_subscription,
-        [conn, subscription_id, user["id"]]
+        [conn, subscription_id, user_id]
     )

@@ -1,6 +1,7 @@
 import bcrypt
 import jwt
 from datetime import datetime, timedelta, timezone
+from typing import Any, Literal
 from core.logger.logger import logger
 from core.config.config import settings
 from core.postgresql.postgresql import postgresql
@@ -34,16 +35,11 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return encoded_jwt
 
 
-def decode_access_token(token: str) -> dict | None:
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        return payload
-    except jwt.ExpiredSignatureError:
-        logger.error("Token has expired")
-        return None
-    except jwt.InvalidTokenError:
-        logger.error("Invalid token")
-        return None
+def decode_access_token(token: str) -> dict[str, Any]:
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    if not isinstance(payload, dict):
+        raise jwt.InvalidTokenError("Invalid token payload")
+    return payload
 
 
 def verify_google_token(token: str) -> dict | None:
@@ -57,7 +53,7 @@ def verify_google_token(token: str) -> dict | None:
 
 
 async def verify_token(token: str, conn, check_can_update: bool = False,
-                       expected_type: str = "auth") -> dict | bool | None:
+                       expected_type: str = "auth") -> dict | Literal[False] | None:
     try:
 
         if token.startswith("Bearer "):
@@ -68,20 +64,19 @@ async def verify_token(token: str, conn, check_can_update: bool = False,
         if payload.get("type") != expected_type:
             raise jwt.InvalidTokenError("Token type mismatch")
 
-        if payload["userId"]:
-            response = await user_service.get_one_user(conn, payload["userId"])
-
-            if response["status"] is None or not response["status"]:
-                raise jwt.InvalidSignatureError("User not found")
-
-            if check_can_update:
-                if payload["canUpdate"]:
-                    return dict(response["data"]["user"])
-                else:
-                    raise jwt.InvalidTokenError("User does not have update permissions")
-            return dict(response["data"]["user"])
-        else:
+        user_id = payload.get("userId")
+        if not user_id:
             raise jwt.InvalidTokenError("Invalid token payload")
+
+        response = await user_service.get_one_user(conn, user_id)
+
+        if response["status"] is None or not response["status"]:
+            raise jwt.InvalidSignatureError("User not found")
+
+        if check_can_update and not payload.get("canUpdate", False):
+            raise jwt.InvalidTokenError("User does not have update permissions")
+
+        return dict(response["data"]["user"])
 
     # I use None to represent expired, and False to invalid *
     except jwt.ExpiredSignatureError:
@@ -106,13 +101,18 @@ async def validate_token(request: Request, conn, check_can_update: bool = False,
         # I use None to represent expired, and False to invalid **
         if user is None:
             raise HTTPException(status_code=401, detail="Token has expired")
-        if not user:
+        if user is False:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        if not isinstance(user, dict):
             raise HTTPException(status_code=401, detail="Invalid token")
 
         request.state.token = token
 
         return user
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -120,7 +120,7 @@ async def validate_token(request: Request, conn, check_can_update: bool = False,
 
 # Validates the token right before the user actually changes their password.
 # It strictly requires the 'canUpdate' permission (proving they passed the code validation step)
-# and passes reset_cookie=True to look for the reset_auth key
+# and passes reset_cookie=True to look for the auth_reset key
 
 async def validate_token_to_update_password(request: Request, conn=Depends(postgresql.get_db)) -> dict:
     return await validate_token(request, conn, check_can_update=True, reset_cookie=True, expected_type="reset")
@@ -136,6 +136,14 @@ async def validate_token_to_validate_code(request: Request, conn=Depends(postgre
 
 async def validate_token_wrapper(request: Request, conn=Depends(postgresql.get_db)) -> dict:
     return await validate_token(request, conn)
+
+
+def get_user_id(user: dict) -> int:
+    user_id = user.get("userId")
+    if not isinstance(user_id, int):
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    return user_id
 
 
 # ==========================================================

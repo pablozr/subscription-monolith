@@ -14,28 +14,44 @@ from services.messaging import messaging_service
 from templates.email import master_forget_password_email_template
 
 
+def build_auth_user_payload(user_id: int, email: str, fullname: str, role: str) -> dict:
+    return {
+        "userId": user_id,
+        "email": email,
+        "fullname": fullname,
+        "role": role,
+    }
+
+
 async def login(conn: asyncpg.Connection, login_data: LoginRequestModel) -> dict:
     select_query = """
                    SELECT id, email, fullname, role, password
                    FROM users
-                   WHERE email = $1 \
+                   WHERE email = $1
                    """
 
     try:
         user = await conn.fetchrow(select_query, login_data.email)
 
         if not user:
-            return {"status": False, "message": "Invalid email or password"}
+            return {"status": False, "message": "Invalid email or password", "data": {}}
 
         if not security.verify_password(login_data.password, user["password"]):
-            return {"status": False, "message": "Invalid email or password"}
+            return {"status": False, "message": "Invalid email or password", "data": {}}
+
+        user_data = build_auth_user_payload(
+            user_id=user["id"],
+            email=user["email"],
+            fullname=user["fullname"],
+            role=user["role"],
+        )
 
         access_token = security.create_access_token(
             {
-                "userId": user["id"],
-                "email": user["email"],
-                "fullname": user["fullname"],
-                "role": user["role"],
+                "userId": user_data["userId"],
+                "email": user_data["email"],
+                "fullname": user_data["fullname"],
+                "role": user_data["role"],
                 "type": "auth"
             }
         )
@@ -45,32 +61,27 @@ async def login(conn: asyncpg.Connection, login_data: LoginRequestModel) -> dict
             "message": "Login successful",
             "data": {
                 "access_token": access_token,
-                "user": {
-                    "userId": user["id"],
-                    "email": user["email"],
-                    "fullname": user["fullname"],
-                    "role": user["role"]
-                }
+                "user": user_data
             }
         }
 
     except Exception as e:
         logger.error(e)
-        return {"status": False, "message": "An error occurred during login"}
+        return {"status": False, "message": "An error occurred during login", "data": {}}
 
 
 async def google_login(conn: asyncpg.Connection, data: LoginGoogleRequestModel) -> dict:
     select_query = """
                    SELECT id, email, fullname, role
                    FROM users
-                   WHERE email = $1 \
+                   WHERE email = $1
                    """
 
     try:
         google_user = security.verify_google_token(data.token)
 
         if not google_user:
-            return {"status": False, "message": "Invalid token"}
+            return {"status": False, "message": "Invalid token", "data": {}}
 
         user = await conn.fetchrow(select_query, google_user["email"])
 
@@ -84,23 +95,23 @@ async def google_login(conn: asyncpg.Connection, data: LoginGoogleRequestModel) 
             response = await user_service.create_user(conn, new_user)
 
             if not response["status"]:
-                return {"status": False, "message": "Failed to create user"}
+                return {"status": False, "message": "Failed to create user", "data": {}}
 
-            new_user_data = response["data"]["user"]
-
-            user = {
-                "id": new_user_data["userId"],
-                "email": new_user_data["email"],
-                "fullname": new_user_data["fullname"],
-                "role": new_user_data["role"]
-            }
+            user_data = response["data"]["user"]
+        else:
+            user_data = build_auth_user_payload(
+                user_id=user["id"],
+                email=user["email"],
+                fullname=user["fullname"],
+                role=user["role"],
+            )
 
         access_token = security.create_access_token(
             {
-                "userId": user["id"],
-                "email": user["email"],
-                "fullname": user["fullname"],
-                "role": user["role"],
+                "userId": user_data["userId"],
+                "email": user_data["email"],
+                "fullname": user_data["fullname"],
+                "role": user_data["role"],
                 "type": "auth"
             }
         )
@@ -110,31 +121,26 @@ async def google_login(conn: asyncpg.Connection, data: LoginGoogleRequestModel) 
             "message": "Login successful",
             "data": {
                 "access_token": access_token,
-                "user": {
-                    "userId": user["id"],
-                    "email": user["email"],
-                    "fullname": user["fullname"],
-                    "role": user["role"]
-                }
+                "user": user_data
             }
         }
     except Exception as e:
         logger.error(e)
-        return {"status": False, "message": "An error occurred during login"}
+        return {"status": False, "message": "An error occurred during login", "data": {}}
 
 
 async def forget_password(conn: asyncpg.Connection, clientmq, redis_client, data: ForgetPasswordRequestModel) -> dict:
     select_query = """
                    SELECT id, email
                    FROM users
-                   WHERE email = $1 \
+                   WHERE email = $1
                    """
 
     try:
         row = await conn.fetchrow(select_query, data.email)
 
         if not row:
-            return {"status": False, "message": "If the email exists, a reset code was sent"}
+            return {"status": False, "message": "If the email exists, a reset code was sent", "data": {}}
 
         code = utils.generate_temp_code()
         cache_key = f'{row["id"]}:{data.email}'
@@ -174,12 +180,13 @@ async def forget_password(conn: asyncpg.Connection, clientmq, redis_client, data
         }
     except Exception as e:
         logger.error(e)
-        return {"status": False, "message": "An error occurred while queueing email"}
+        return {"status": False, "message": "An error occurred while queueing email", "data": {}}
 
 
 async def validate_code(redis_client: redis.asyncio.Redis, code: str, user: dict):
     try:
-        cache_key = f'{user["id"]}:{user["email"]}'
+        user_id = security.get_user_id(user)
+        cache_key = f'{user_id}:{user["email"]}'
         redis_code = await cache_service.get_items_by_key(cache_key, redis_client)
 
         if not redis_code or not isinstance(redis_code, dict):
@@ -190,7 +197,7 @@ async def validate_code(redis_client: redis.asyncio.Redis, code: str, user: dict
         
         access_token = security.create_access_token(
             {
-                "userId": user["id"],
+                "userId": user_id,
                 "email": user["email"],
                 "canUpdate": True,
                 "type": "reset"

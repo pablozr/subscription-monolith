@@ -95,9 +95,9 @@ def reagendar_tarefa(scheduler, brazil_tz, actual_datetime):
             microsecond=0
         ) + timedelta(days=1)
 
-        print("-" * 60)
-        print(f"Tarefa reagendada para: {next_run_on_function}")
-        print("-" * 60)
+        logger.info("-" * 60)
+        logger.info(f"Tarefa reagendada para: {next_run_on_function}")
+        logger.info("-" * 60)
 
         scheduler.enterabs(
             next_run_on_function.timestamp(),
@@ -126,9 +126,9 @@ if __name__ == "__main__":
     if now >= first_run:
         first_run += timedelta(days=1)
 
-    print("-" * 60)
-    print(f"Primeira execução agendada para: {first_run}")
-    print("-" * 60)
+    logger.info("-" * 60)
+    logger.info(f"Primeira execução agendada para: {first_run}")
+    logger.info("-" * 60)
 
     scheduler.enterabs(
         first_run.timestamp(),

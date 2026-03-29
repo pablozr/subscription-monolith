@@ -168,7 +168,7 @@ async def update_subscription(conn: asyncpg.Connection, subscription_id: int, us
 
 async def cancel_subscription(conn: asyncpg.Connection, subscription_id: int, user_id: int) -> dict:
     update_query = """
-                   UPDATE subscriptions SET status = 'CANCELED', canceled_at = NOW()
+                   UPDATE subscriptions SET status = 'CANCELED', canceled_at = NOW(), updated_at = NOW()
                    WHERE id = $1 AND user_id = $2 AND status = 'ACTIVE'
                    RETURNING id
                    """

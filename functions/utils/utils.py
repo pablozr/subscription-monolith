@@ -17,7 +17,7 @@ async def default_response(callable_function: Callable, params: list = [], is_cr
         if not result["status"]:
             if not dict_response:
                 return JSONResponse(status_code=400, content={"detail": result["message"]})
-            return {"status": False, "message": result["message"]}
+            return {"status": False, "message": result["message"], "data": {}}
 
         status_code = 200 if not is_creation else 201
         if not dict_response:
@@ -27,7 +27,7 @@ async def default_response(callable_function: Callable, params: list = [], is_cr
         logger.exception(e)
         if not dict_response:
             return JSONResponse(status_code=500, content={"detail": "Erro interno com o servidor."})
-        return {"status": False, "message": "Erro interno com o servidor."}
+        return {"status": False, "message": "Erro interno com o servidor.", "data": {}}
 
 
 def update_default_dict(data: dict, json_targets: list[str] = [], decimal_targets: list[str] = [],
