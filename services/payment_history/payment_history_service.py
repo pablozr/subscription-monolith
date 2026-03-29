@@ -113,7 +113,7 @@ async def create_payment(
             )
 
             if not payment:
-                return {"status": False, "message": "Failed to register payment", "data": {}}
+                raise ValueError("Payment not registered for this reference date")
 
             next_payment_date = calculate_next_payment_date(
                 current_next_payment=reference_date,
@@ -124,7 +124,7 @@ async def create_payment(
             updated_subscription = await conn.fetchrow(update_subscription_query, next_payment_date, subscription_id, user_id)
 
             if not updated_subscription:
-                return {"status": False, "message": "Failed to update subscription next payment date", "data": {}}
+                raise ValueError("Failed to update subscription next payment date")
 
             parsed_payment = update_default_dict(
                 {**payment},
@@ -158,6 +158,8 @@ async def create_payment(
             }
     except UniqueViolationError:
         return {"status": False, "message": "Payment already registered for this reference date", "data": {}}
+    except ValueError as e:
+        return {"status": False, "message": str(e), "data": {}}
     except Exception as e:
         logger.exception(e)
         return {"status": False, "message": "An error occurred while registering payment", "data": {}}
@@ -208,19 +210,42 @@ async def get_user_payment_history(
     limit: int,
     offset: int,
 ) -> dict:
-    query = """
+    where_clauses = ["user_id = $1"]
+    query_params: list[object] = [user_id]
+    placeholder_index = 2
+
+    if subscription_id is not None:
+        where_clauses.append(f"subscription_id = ${placeholder_index}")
+        query_params.append(subscription_id)
+        placeholder_index += 1
+
+    if start_date is not None:
+        where_clauses.append(f"paid_at >= ${placeholder_index}")
+        query_params.append(start_date)
+        placeholder_index += 1
+
+    if end_date is not None:
+        where_clauses.append(f"paid_at <= ${placeholder_index}")
+        query_params.append(end_date)
+        placeholder_index += 1
+
+    limit_placeholder = f"${placeholder_index}"
+    query_params.append(limit)
+    placeholder_index += 1
+
+    offset_placeholder = f"${placeholder_index}"
+    query_params.append(offset)
+
+    query = f"""
         SELECT id, subscription_id, user_id, amount, paid_at, payment_method, reference, notes, created_at
         FROM payment_history
-        WHERE user_id = $1
-          AND ($2::BIGINT IS NULL OR subscription_id = $2::BIGINT)
-          AND ($3::DATE IS NULL OR paid_at >= $3::DATE)
-          AND ($4::DATE IS NULL OR paid_at <= $4::DATE)
+        WHERE {' AND '.join(where_clauses)}
         ORDER BY paid_at DESC, id DESC
-        LIMIT $5 OFFSET $6
+        LIMIT {limit_placeholder} OFFSET {offset_placeholder}
     """
 
     try:
-        rows = await conn.fetch(query, user_id, subscription_id, start_date, end_date, limit, offset)
+        rows = await conn.fetch(query, *query_params)
         payments = parse_payment_history_rows(list(rows))
 
         return {

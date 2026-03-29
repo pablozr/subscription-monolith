@@ -77,3 +77,57 @@ class PaymentHistoryApiTests(ApiBaseTestCase):
         self.assertEqual(args[4], date(2026, 1, 31))
         self.assertEqual(args[5], 10)
         self.assertEqual(args[6], 5)
+
+    def test_create_payment_returns_400_when_service_reports_failure(self):
+        with patch(
+            "routes.payment_history.router.payment_history_service.create_payment",
+            new=AsyncMock(return_value={
+                "status": False,
+                "message": "Payment already registered for this reference date",
+                "data": {},
+            }),
+        ):
+            response = self.client.post(
+                "/payments/subscriptions/10",
+                json={"paymentMethod": "pix", "reference": "ref-1"},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"detail": "Payment already registered for this reference date"})
+
+    def test_create_payment_returns_500_when_service_raises_unexpected_exception(self):
+        with patch(
+            "routes.payment_history.router.payment_history_service.create_payment",
+            new=AsyncMock(side_effect=RuntimeError("boom")),
+        ):
+            response = self.client.post(
+                "/payments/subscriptions/10",
+                json={"paymentMethod": "pix", "reference": "ref-1"},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json(), {"detail": "Erro interno com o servidor."})
+
+    def test_get_subscription_payment_history_returns_400_when_service_reports_failure(self):
+        with patch(
+            "routes.payment_history.router.payment_history_service.get_subscription_payment_history",
+            new=AsyncMock(return_value={
+                "status": False,
+                "message": "An error occurred while fetching payment history",
+                "data": {},
+            }),
+        ):
+            response = self.client.get("/payments/subscriptions/10")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"detail": "An error occurred while fetching payment history"})
+
+    def test_get_user_payment_history_returns_500_when_service_raises_unexpected_exception(self):
+        with patch(
+            "routes.payment_history.router.payment_history_service.get_user_payment_history",
+            new=AsyncMock(side_effect=RuntimeError("boom")),
+        ):
+            response = self.client.get("/payments/history")
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json(), {"detail": "Erro interno com o servidor."})

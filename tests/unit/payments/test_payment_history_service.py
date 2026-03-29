@@ -101,6 +101,20 @@ class PaymentHistoryServiceTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(result, {"status": False, "message": "Payment already registered for this reference date", "data": {}})
 
+    async def test_create_payment_returns_infrastructure_error_when_database_operation_fails(self):
+        conn = MagicMock()
+        conn.transaction.return_value = AsyncContextManager()
+        conn.fetchrow = AsyncMock(side_effect=RuntimeError("database unavailable"))
+
+        result = await payment_history_service.create_payment(
+            conn,
+            2,
+            4,
+            PaymentHistoryCreateRequest(paymentMethod="credit_card", paidAt=date(2026, 2, 5)),
+        )
+
+        self.assertEqual(result, {"status": False, "message": "An error occurred while registering payment", "data": {}})
+
     async def test_get_user_payment_history_formats_rows_and_pagination(self):
         conn = MagicMock()
         conn.fetch = AsyncMock(return_value=[{
@@ -117,6 +131,49 @@ class PaymentHistoryServiceTests(IsolatedAsyncioTestCase):
 
         result = await payment_history_service.get_user_payment_history(conn, 4, None, None, None, 30, 0)
 
+        query, *params = conn.fetch.await_args_list[0].args
+
         self.assertTrue(result["status"])
         self.assertEqual(result["data"]["payments"][0]["subscriptionId"], 2)
         self.assertEqual(result["data"]["pagination"], {"limit": 30, "offset": 0})
+        self.assertNotIn(" IS NULL OR ", query)
+        self.assertIn("WHERE user_id = $1", query)
+        self.assertIn("LIMIT $2 OFFSET $3", query)
+        self.assertEqual(params, [4, 30, 0])
+
+    async def test_get_user_payment_history_builds_query_with_all_filters(self):
+        conn = MagicMock()
+        conn.fetch = AsyncMock(return_value=[])
+
+        await payment_history_service.get_user_payment_history(
+            conn,
+            4,
+            2,
+            date(2026, 1, 1),
+            date(2026, 1, 31),
+            10,
+            5,
+        )
+
+        query, *params = conn.fetch.await_args_list[0].args
+
+        self.assertNotIn(" IS NULL OR ", query)
+        self.assertIn("WHERE user_id = $1 AND subscription_id = $2 AND paid_at >= $3 AND paid_at <= $4", query)
+        self.assertIn("LIMIT $5 OFFSET $6", query)
+        self.assertEqual(params, [4, 2, date(2026, 1, 1), date(2026, 1, 31), 10, 5])
+
+    async def test_get_subscription_payment_history_returns_infrastructure_error_when_database_fails(self):
+        conn = MagicMock()
+        conn.fetch = AsyncMock(side_effect=RuntimeError("database unavailable"))
+
+        result = await payment_history_service.get_subscription_payment_history(conn, 2, 4, 30, 0)
+
+        self.assertEqual(result, {"status": False, "message": "An error occurred while fetching payment history", "data": {}})
+
+    async def test_get_user_payment_history_returns_infrastructure_error_when_database_fails(self):
+        conn = MagicMock()
+        conn.fetch = AsyncMock(side_effect=RuntimeError("database unavailable"))
+
+        result = await payment_history_service.get_user_payment_history(conn, 4, None, None, None, 30, 0)
+
+        self.assertEqual(result, {"status": False, "message": "An error occurred while fetching payment history", "data": {}})
