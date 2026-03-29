@@ -79,7 +79,7 @@ async def create_payment(
         UPDATE subscriptions
         SET next_payment_date = $1,
             updated_at = NOW()
-        WHERE id = $2 AND user_id = $3
+        WHERE id = $2 AND user_id = $3 AND status = 'ACTIVE' AND billing_cycle = $4
         RETURNING id, next_payment_date
     """
 
@@ -88,13 +88,13 @@ async def create_payment(
             subscription = await conn.fetchrow(select_subscription_query, subscription_id, user_id)
 
             if not subscription:
-                return {"status": False, "message": "Subscription not found", "data": {}}
+                raise ValueError("Subscription not found")
 
             if subscription["status"] != "ACTIVE":
-                return {"status": False, "message": "Cannot register payment for inactive subscription", "data": {}}
+                raise ValueError("Subscription not active")
 
             if subscription["billing_cycle"] not in CYCLE_OFFSETS:
-                return {"status": False, "message": "Invalid billing cycle for subscription", "data": {}}
+                raise ValueError("Invalid billing cycle")
 
             paid_at = data.paid_at or date.today()
             amount = data.amount if data.amount is not None else float(subscription["price"])
@@ -121,7 +121,13 @@ async def create_payment(
                 billing_cycle=subscription["billing_cycle"]
             )
 
-            updated_subscription = await conn.fetchrow(update_subscription_query, next_payment_date, subscription_id, user_id)
+            updated_subscription = await conn.fetchrow(
+                update_subscription_query,
+                next_payment_date,
+                subscription_id,
+                user_id,
+                subscription["billing_cycle"]
+            )
 
             if not updated_subscription:
                 raise ValueError("Failed to update subscription next payment date")

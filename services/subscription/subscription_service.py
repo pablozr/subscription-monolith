@@ -101,7 +101,7 @@ async def create_subscription(conn: asyncpg.Connection, user_id: int, data: Subs
             )
 
             if not row:
-                return {"status": False, "message": "Failed to create subscription", "data": {}}
+                raise ValueError("Failed to create subscription")
 
             subscription = update_default_dict(
                 {**row},
@@ -116,6 +116,9 @@ async def create_subscription(conn: asyncpg.Connection, user_id: int, data: Subs
             }
     except ForeignKeyViolationError:
         return {"status": False, "message": "Invalid user", "data": {}}
+    except ValueError as e:
+        logger.error(e)
+        return {"status": False, "message": "Invalid data", "data": {}}
     except Exception as e:
         logger.error(e)
         return {"status": False, "message": "An error occurred while creating subscription", "data": {}}
@@ -148,7 +151,7 @@ async def update_subscription(conn: asyncpg.Connection, subscription_id: int, us
             row = await conn.fetchrow(update_query, *values)
 
             if not row:
-                return {"status": False, "message": "Subscription not found", "data": {}}
+                raise ValueError("Failed to update subscription")
 
             subscription = update_default_dict(
                 {**row},
@@ -161,6 +164,10 @@ async def update_subscription(conn: asyncpg.Connection, subscription_id: int, us
                 "message": "Subscription updated successfully",
                 "data": {"subscription": subscription}
             }
+
+    except ValueError as e:
+        logger.error(e)
+        return {"status": False, "message": "An error occurred while updating subscription", "data": {}}
     except Exception as e:
         logger.error(e)
         return {"status": False, "message": "An error occurred while updating subscription", "data": {}}
@@ -178,13 +185,16 @@ async def cancel_subscription(conn: asyncpg.Connection, subscription_id: int, us
             row = await conn.fetchrow(update_query, subscription_id, user_id)
 
             if not row:
-                return {"status": False, "message": "Subscription not found or already canceled", "data": {}}
+                raise ValueError("Failed to cancel subscription")
 
             return {
                 "status": True,
                 "message": "Subscription canceled successfully",
                 "data": {"id": row["id"]}
             }
+    except ValueError as e:
+        logger.error(e)
+        return {"status": False, "message": "An error occurred while updating subscription", "data": {}}
     except Exception as e:
         logger.error(e)
         return {"status": False, "message": "An error occurred while canceling subscription", "data": {}}
@@ -202,13 +212,16 @@ async def delete_subscription(conn: asyncpg.Connection, subscription_id: int, us
             row = await conn.fetchrow(delete_query, subscription_id, user_id)
 
             if not row:
-                return {"status": False, "message": "Subscription not found", "data": {}}
+                raise ValueError("Failed to delete subscription")
 
             return {
                 "status": True,
                 "message": "Subscription deleted successfully",
                 "data": {"id": row["id"]}
             }
+    except ValueError as e:
+        logger.error(e)
+        return {"status": False, "message": "An error occurred while deleting subscription", "data": {}}
     except Exception as e:
         logger.error(e)
         return {"status": False, "message": "An error occurred while deleting subscription", "data": {}}

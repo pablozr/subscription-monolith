@@ -74,7 +74,7 @@ class PaymentHistoryServiceTests(IsolatedAsyncioTestCase):
         insert_args = conn.fetchrow.await_args_list[1].args
         update_args = conn.fetchrow.await_args_list[2].args
         self.assertEqual(insert_args[1:], (2, 4, date(2026, 2, 5), 49.9, date(2026, 2, 5), "credit_card", "ref-1", None))
-        self.assertEqual(update_args[1:], (date(2026, 3, 5), 2, 4))
+        self.assertEqual(update_args[1:], (date(2026, 3, 5), 2, 4, "MONTHLY"))
         self.assertTrue(result["status"])
         self.assertEqual(result["data"]["payment"]["amount"], 49.9)
         self.assertEqual(result["data"]["subscription"]["nextPaymentDate"], "2026-03-05")
