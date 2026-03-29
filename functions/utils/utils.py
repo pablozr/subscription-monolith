@@ -50,7 +50,7 @@ def update_default_dict(data: dict, json_targets: list[str] = [], decimal_target
         new_data[decimal_target] = float(new_data[decimal_target])
 
     for data_target in date_targets:
-        new_data[data_target] = str(new_data[data_target])
+        new_data[data_target] = str(new_data[data_target]) if new_data[data_target] is not None else None
 
     return new_data
 

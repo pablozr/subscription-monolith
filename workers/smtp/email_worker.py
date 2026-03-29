@@ -15,15 +15,15 @@ from core.rabbitmq.rabbitmq import rabbitmq
 
 
 def _extract_email_payload(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        return {}
+
     email_payload = payload.get("email")
 
     if isinstance(email_payload, dict):
         return email_payload
 
-    if isinstance(payload, dict):
-        return payload
-
-    return {}
+    return payload
 
 
 def _send_email_sync(payload: dict):

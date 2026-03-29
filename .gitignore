@@ -5,6 +5,9 @@
 # Ignore IDE configuration files
 .idea/
 
+# Local documentation workspace
+/docs/
+
 # Local agent/IDE metadata (not versioned)
 .cursor/
 .agents/
@@ -17,3 +20,4 @@
 *.swp
 
 .opencode
+manual_db_changes.sql
