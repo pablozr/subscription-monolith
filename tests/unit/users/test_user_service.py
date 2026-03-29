@@ -40,3 +40,13 @@ class UserServiceTests(IsolatedAsyncioTestCase):
             result = await user_service.update_password(conn, 77, "new-password")
 
         self.assertEqual(result, {"status": False, "message": "User not found", "data": {}})
+
+    async def test_update_password_returns_not_found_when_session_version_is_stale(self):
+        conn = MagicMock()
+        conn.transaction.return_value = AsyncContextManager()
+        conn.fetchrow = AsyncMock(return_value=None)
+
+        with patch("services.user.user_service.security.hash_password", return_value="hashed-password"):
+            result = await user_service.update_password(conn, 77, "new-password", expected_session_version=5)
+
+        self.assertEqual(result, {"status": False, "message": "User not found", "data": {}})

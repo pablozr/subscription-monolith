@@ -25,7 +25,7 @@ def build_auth_user_payload(user_id: int, email: str, fullname: str, role: str) 
 
 async def login(conn: asyncpg.Connection, login_data: LoginRequestModel) -> dict:
     select_query = """
-                   SELECT id, email, fullname, role, password
+                   SELECT id, email, fullname, role, password, session_version
                    FROM users
                    WHERE email = $1
                    """
@@ -52,6 +52,7 @@ async def login(conn: asyncpg.Connection, login_data: LoginRequestModel) -> dict
                 "email": user_data["email"],
                 "fullname": user_data["fullname"],
                 "role": user_data["role"],
+                "sessionVersion": user["session_version"],
                 "type": "auth"
             }
         )
@@ -72,7 +73,7 @@ async def login(conn: asyncpg.Connection, login_data: LoginRequestModel) -> dict
 
 async def google_login(conn: asyncpg.Connection, data: LoginGoogleRequestModel) -> dict:
     select_query = """
-                   SELECT id, email, fullname, role
+                   SELECT id, email, fullname, role, session_version
                    FROM users
                    WHERE email = $1
                    """
@@ -98,6 +99,7 @@ async def google_login(conn: asyncpg.Connection, data: LoginGoogleRequestModel) 
                 return {"status": False, "message": "Failed to create user", "data": {}}
 
             user_data = response["data"]["user"]
+            session_version = 1
         else:
             user_data = build_auth_user_payload(
                 user_id=user["id"],
@@ -105,6 +107,7 @@ async def google_login(conn: asyncpg.Connection, data: LoginGoogleRequestModel) 
                 fullname=user["fullname"],
                 role=user["role"],
             )
+            session_version = user["session_version"]
 
         access_token = security.create_access_token(
             {
@@ -112,6 +115,7 @@ async def google_login(conn: asyncpg.Connection, data: LoginGoogleRequestModel) 
                 "email": user_data["email"],
                 "fullname": user_data["fullname"],
                 "role": user_data["role"],
+                "sessionVersion": session_version,
                 "type": "auth"
             }
         )
@@ -131,7 +135,7 @@ async def google_login(conn: asyncpg.Connection, data: LoginGoogleRequestModel) 
 
 async def forget_password(conn: asyncpg.Connection, clientmq, redis_client, data: ForgetPasswordRequestModel) -> dict:
     select_query = """
-                   SELECT id, email
+                   SELECT id, email, session_version
                    FROM users
                    WHERE email = $1
                    """
@@ -166,6 +170,7 @@ async def forget_password(conn: asyncpg.Connection, clientmq, redis_client, data
                 "userId": row["id"],
                 "email": row["email"],
                 "canUpdate": False,
+                "sessionVersion": row["session_version"],
                 "type": "reset"
             },
             expires_delta=timedelta(minutes=15)
@@ -200,6 +205,7 @@ async def validate_code(redis_client: redis.asyncio.Redis, code: str, user: dict
                 "userId": user_id,
                 "email": user["email"],
                 "canUpdate": True,
+                "sessionVersion": user.get("sessionVersion", 1),
                 "type": "reset"
             }, timedelta(minutes=10)
         )

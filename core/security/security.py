@@ -68,15 +68,24 @@ async def verify_token(token: str, conn, check_can_update: bool = False,
         if not user_id:
             raise jwt.InvalidTokenError("Invalid token payload")
 
-        response = await user_service.get_one_user(conn, user_id)
+        token_session_version = payload.get("sessionVersion")
+        if not isinstance(token_session_version, int):
+            raise jwt.InvalidTokenError("Invalid token payload")
+
+        response = await user_service.get_user_auth_context(conn, user_id)
 
         if response["status"] is None or not response["status"]:
-            raise jwt.InvalidSignatureError("User not found")
+            raise jwt.InvalidTokenError("User not found")
+
+        user = dict(response["data"]["user"])
+
+        if user.get("sessionVersion") != token_session_version:
+            raise jwt.InvalidTokenError("Token session is no longer valid")
 
         if check_can_update and not payload.get("canUpdate", False):
             raise jwt.InvalidTokenError("User does not have update permissions")
 
-        return dict(response["data"]["user"])
+        return user
 
     # I use None to represent expired, and False to invalid *
     except jwt.ExpiredSignatureError:

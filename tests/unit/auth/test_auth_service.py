@@ -14,15 +14,18 @@ class AuthServiceTests(IsolatedAsyncioTestCase):
             "fullname": "Test User",
             "role": "BASIC",
             "password": "hashed",
+            "session_version": 3,
         })
 
         with patch("services.auth.auth_service.security.verify_password", return_value=True), \
-             patch("services.auth.auth_service.security.create_access_token", return_value="jwt-token"):
+             patch("services.auth.auth_service.security.create_access_token", return_value="jwt-token") as create_access_token:
             result = await auth_service.login(conn, LoginRequestModel(email="user@test.com", password="12345678"))
 
         self.assertTrue(result["status"])
         self.assertEqual(result["data"]["access_token"], "jwt-token")
         self.assertEqual(result["data"]["user"]["email"], "user@test.com")
+        token_payload = create_access_token.call_args.args[0]
+        self.assertEqual(token_payload["sessionVersion"], 3)
 
     async def test_google_login_creates_user_when_email_does_not_exist(self):
         conn = MagicMock()
@@ -39,12 +42,12 @@ class AuthServiceTests(IsolatedAsyncioTestCase):
 
     async def test_forget_password_stores_code_queues_email_and_returns_reset_token(self):
         conn = MagicMock()
-        conn.fetchrow = AsyncMock(return_value={"id": 12, "email": "user@test.com"})
+        conn.fetchrow = AsyncMock(return_value={"id": 12, "email": "user@test.com", "session_version": 2})
 
         with patch("services.auth.auth_service.utils.generate_temp_code", return_value="123456"), \
              patch("services.auth.auth_service.cache_service.create_items_by_key", AsyncMock()) as create_items, \
              patch("services.auth.auth_service.messaging_service.publish_notification", AsyncMock()) as publish_notification, \
-             patch("services.auth.auth_service.security.create_access_token", return_value="reset-token"):
+             patch("services.auth.auth_service.security.create_access_token", return_value="reset-token") as create_access_token:
             result = await auth_service.forget_password(
                 conn,
                 clientmq=object(),
@@ -56,6 +59,8 @@ class AuthServiceTests(IsolatedAsyncioTestCase):
         publish_notification.assert_awaited_once()
         self.assertTrue(result["status"])
         self.assertEqual(result["data"]["access_token"], "reset-token")
+        token_payload = create_access_token.call_args.args[0]
+        self.assertEqual(token_payload["sessionVersion"], 2)
 
     async def test_validate_code_clears_cache_and_returns_upgrade_token(self):
         redis_client = object()

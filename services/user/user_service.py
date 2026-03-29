@@ -38,6 +38,31 @@ async def get_one_user(conn: asyncpg.Connection, user_id: int) -> UserGetRespons
     }
 
 
+async def get_user_auth_context(conn: asyncpg.Connection, user_id: int) -> dict:
+    query = "SELECT id, email, fullname, role, session_version FROM users WHERE id = $1"
+
+    row = await conn.fetchrow(query, user_id)
+
+    if not row:
+        return {"status": False, "message": "User not found", "data": {}}
+
+    user = {
+        **build_user_payload(
+            user_id=row["id"],
+            email=row["email"],
+            fullname=row["fullname"],
+            role=row["role"],
+        ),
+        "sessionVersion": row["session_version"],
+    }
+
+    return {
+        "status": True,
+        "message": "User auth context retrieved successfully",
+        "data": {"user": user}
+    }
+
+
 async def create_user(conn: asyncpg.Connection, data: UserCreateRequest) -> dict:
     insert_query = """
                    INSERT INTO users (email, password, fullname, role, created_at)
@@ -109,17 +134,26 @@ async def update_user_auto(conn: asyncpg.Connection, user_id: int, data: UserUpd
         return {"status": False, "message": "An error occurred while updating user", "data": {}}
 
 
-async def update_password(conn: asyncpg.Connection, user_id: int, new_password: str) -> dict:
+async def update_password(
+    conn: asyncpg.Connection,
+    user_id: int,
+    new_password: str,
+    expected_session_version: int | None = None,
+) -> dict:
     update_query = """
-                   UPDATE users SET password = $1, updated_at = NOW()
+                   UPDATE users
+                   SET password = $1,
+                       session_version = session_version + 1,
+                       updated_at = NOW()
                    WHERE id = $2
-                   RETURNING id
+                     AND ($3::INT IS NULL OR session_version = $3)
+                   RETURNING id, session_version
                    """
 
     try:
         async with conn.transaction():
             hashed_password = security.hash_password(new_password)
-            row = await conn.fetchrow(update_query, hashed_password, user_id)
+            row = await conn.fetchrow(update_query, hashed_password, user_id, expected_session_version)
 
             if not row:
                 return {"status": False, "message": "User not found", "data": {}}

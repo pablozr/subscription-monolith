@@ -10,8 +10,19 @@ class AsyncContextManager:
 
 
 class FakeIncomingMessage:
-    def __init__(self, body: bytes):
+    def __init__(self, body: bytes, headers: dict | None = None):
         self.body = body
+        self.headers = headers or {}
+        self.acked = False
+        self.nacked = False
+        self.requeued = None
 
     def process(self, requeue=True):
         return AsyncContextManager()
+
+    async def ack(self):
+        self.acked = True
+
+    async def nack(self, requeue=True):
+        self.nacked = True
+        self.requeued = requeue

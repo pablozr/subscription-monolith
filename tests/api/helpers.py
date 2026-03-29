@@ -19,7 +19,7 @@ TEST_DB_CONN = object()
 TEST_REDIS_CLIENT = object()
 TEST_MQ_CHANNEL = object()
 AUTH_USER = {"userId": 17, "email": "api@test.com", "role": "BASIC"}
-RESET_USER = {"userId": 17, "email": "api@test.com", "canUpdate": True}
+RESET_USER = {"userId": 17, "email": "api@test.com", "canUpdate": True, "sessionVersion": 1}
 
 
 async def override_db():

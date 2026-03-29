@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     RATE_LIMIT_GOOGLE_LOGIN_MAX_REQUESTS: int = 10
     RATE_LIMIT_FORGET_PASSWORD_MAX_REQUESTS: int = 5
     RATE_LIMIT_VALIDATE_CODE_MAX_REQUESTS: int = 10
+    RATE_LIMIT_TRUST_PROXY_HEADERS: bool = False
+    RATE_LIMIT_FAIL_OPEN: bool = False
 
     SMTP_HOST: str
     SMTP_PORT: int = 587
@@ -38,6 +40,10 @@ class Settings(BaseSettings):
     EMAIL_FROM: str
     SMTP_TIMEOUT_SECONDS: int = 15
     SMTP_USE_STARTTLS: bool = True
+    EMAIL_QUEUE_MAX_RETRIES: int = 5
+    EMAIL_RETRY_DELAY_MS: int = 5000
+    EMAIL_RETRY_QUEUE_NAME: str = "email-queue.retry"
+    EMAIL_DLQ_NAME: str = "email-queue.dlq"
 
     GOOGLE_CLIENT_ID: str
 

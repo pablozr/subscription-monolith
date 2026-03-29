@@ -1,22 +1,26 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 
 
-class LoginRequestModel(BaseModel):
-    email: str
-    password: str
+class AuthBaseModel(BaseModel):
+    model_config = {"extra": "forbid"}
 
 
-class LoginGoogleRequestModel(BaseModel):
-    token: str
+class LoginRequestModel(AuthBaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
 
 
-class ForgetPasswordRequestModel(BaseModel):
-    email: str
+class LoginGoogleRequestModel(AuthBaseModel):
+    token: str = Field(min_length=10, max_length=4096)
 
 
-class ValidateCodeRequest(BaseModel):
-    code: str
+class ForgetPasswordRequestModel(AuthBaseModel):
+    email: EmailStr
 
 
-class UpdatePasswordRequest(BaseModel):
-    password: str
+class ValidateCodeRequest(AuthBaseModel):
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class UpdatePasswordRequest(AuthBaseModel):
+    password: str = Field(min_length=8, max_length=128)

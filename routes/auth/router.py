@@ -161,7 +161,10 @@ async def update_password(
 ):
     try:
         user_id = security.get_user_id(user)
-        response = await user_service.update_password(conn, user_id, data.password)
+        session_version = user.get("sessionVersion")
+        expected_session_version = session_version if isinstance(session_version, int) else None
+
+        response = await user_service.update_password(conn, user_id, data.password, expected_session_version)
 
         if not response["status"]:
             return JSONResponse(status_code=400, content={"detail": response["message"]})
@@ -169,6 +172,13 @@ async def update_password(
         resp = JSONResponse(status_code=200, content={"message": response["message"]})
         resp.delete_cookie(
             key="auth_reset",
+            path="/",
+            secure=True,
+            httponly=True,
+            samesite="lax",
+        )
+        resp.delete_cookie(
+            key="auth",
             path="/",
             secure=True,
             httponly=True,

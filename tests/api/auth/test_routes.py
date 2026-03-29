@@ -51,7 +51,7 @@ class AuthApiTests(ApiBaseTestCase):
         ):
             response = self.client.post(
                 "/auth/login",
-                json={"email": "api@test.com", "password": "wrong"},
+                json={"email": "api@test.com", "password": "wrongpass"},
             )
 
         self.assertEqual(response.status_code, 400)
@@ -106,12 +106,14 @@ class AuthApiTests(ApiBaseTestCase):
         self.assertEqual(response.json(), {"message": "Password updated"})
         cookie_header = response.header("set-cookie")
         self.assertIn("auth_reset=", cookie_header)
+        self.assertIn("auth=", cookie_header)
         self.assertIn("Max-Age=0", cookie_header)
 
         args = mocked_update.await_args_list[0].args
         self.assertIs(args[0], TEST_DB_CONN)
         self.assertEqual(args[1], 17)
         self.assertEqual(args[2], "new-password")
+        self.assertEqual(args[3], 1)
 
     def test_logout_deletes_auth_cookie(self):
         response = self.client.post("/auth/logout")

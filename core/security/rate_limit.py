@@ -7,9 +7,12 @@ from core.redis.redis import redis_cache
 
 
 def get_client_identifier(request: Request) -> str:
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
+    if settings.RATE_LIMIT_TRUST_PROXY_HEADERS:
+        forwarded_for = request.headers.get("x-forwarded-for")
+        if forwarded_for:
+            first_proxy_ip = forwarded_for.split(",")[0].strip()
+            if first_proxy_ip:
+                return first_proxy_ip
 
     if request.client and request.client.host:
         return request.client.host
@@ -45,6 +48,8 @@ async def enforce_rate_limit(
         raise
     except Exception as e:
         logger.exception(f"Rate limit check failed for '{key_prefix}': {e}")
+        if not settings.RATE_LIMIT_FAIL_OPEN:
+            raise HTTPException(status_code=503, detail="Rate limit service unavailable. Please try again later.")
 
 
 async def rate_limit_login(
