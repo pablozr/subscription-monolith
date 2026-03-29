@@ -3,6 +3,8 @@ from decimal import Decimal
 from unittest import IsolatedAsyncioTestCase, TestCase
 from unittest.mock import AsyncMock, MagicMock
 
+from asyncpg.exceptions import UniqueViolationError
+
 from schemas.payment_history import PaymentHistoryCreateRequest
 from services.payment_history import payment_history_service
 from tests.unit.helpers import AsyncContextManager
@@ -71,11 +73,33 @@ class PaymentHistoryServiceTests(IsolatedAsyncioTestCase):
 
         insert_args = conn.fetchrow.await_args_list[1].args
         update_args = conn.fetchrow.await_args_list[2].args
-        self.assertEqual(insert_args[1:], (2, 4, 49.9, date(2026, 2, 5), "credit_card", "ref-1", None))
+        self.assertEqual(insert_args[1:], (2, 4, date(2026, 2, 5), 49.9, date(2026, 2, 5), "credit_card", "ref-1", None))
         self.assertEqual(update_args[1:], (date(2026, 3, 5), 2, 4))
         self.assertTrue(result["status"])
         self.assertEqual(result["data"]["payment"]["amount"], 49.9)
         self.assertEqual(result["data"]["subscription"]["nextPaymentDate"], "2026-03-05")
+
+    async def test_create_payment_returns_domain_error_when_reference_date_already_exists(self):
+        conn = MagicMock()
+        conn.transaction.return_value = AsyncContextManager()
+        subscription = {
+            "id": 2,
+            "user_id": 4,
+            "price": Decimal("49.90"),
+            "billing_cycle": "MONTHLY",
+            "status": "ACTIVE",
+            "next_payment_date": date(2026, 2, 5),
+        }
+        conn.fetchrow = AsyncMock(side_effect=[subscription, UniqueViolationError("duplicate key value violates unique constraint")])
+
+        result = await payment_history_service.create_payment(
+            conn,
+            2,
+            4,
+            PaymentHistoryCreateRequest(paymentMethod="credit_card", paidAt=date(2026, 2, 5)),
+        )
+
+        self.assertEqual(result, {"status": False, "message": "Payment already registered for this reference date", "data": {}})
 
     async def test_get_user_payment_history_formats_rows_and_pagination(self):
         conn = MagicMock()
