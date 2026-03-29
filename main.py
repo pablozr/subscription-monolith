@@ -10,6 +10,7 @@ from core.config.config import settings
 from routes.auth.router import router as auth_router
 from routes.users.router import router as users_router
 from routes.subscription.router import router as subscription_router
+from routes.payment_history.router import router as payment_history_router
 
 
 @asynccontextmanager
@@ -32,7 +33,7 @@ app = FastAPI(lifespan=lifespan, openapi_url="/api/v1/subreminders/openapi.json"
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4200"],
+    allow_origins=settings.cors_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,6 +50,7 @@ async def custom_docs():
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(users_router, prefix="/users", tags=["users"])
 app.include_router(subscription_router, prefix="/subscriptions", tags=["subscriptions"])
+app.include_router(payment_history_router, prefix="/payments", tags=["payments"])
 
 if __name__ == "__main__":
     import uvicorn

@@ -31,12 +31,12 @@ Most people today pay for multiple subscription services -- streaming platforms,
 1. The user creates an account (via email/password or Google login).
 2. They register their active subscriptions, including the service name, cost, billing cycle, and next renewal date.
 3. A scheduled worker monitors upcoming renewal dates and, when one is approaching, publishes a message to RabbitMQ.
-4. An email worker consumes that message and sends a reminder to the user via SMTP.
+4. The email worker consumes that message and sends reminders to the user via SMTP.
 5. The user receives the reminder and decides whether to keep or cancel the subscription.
 
 ### Architecture decisions
 
-The project follows a modular monolith architecture. Each domain (auth, users, subscriptions) is isolated into its own route, service, and schema layer while sharing a single deployment unit and database. This keeps the codebase simple to deploy and operate while maintaining clear boundaries for future extraction into independent services if needed.
+The project follows a modular monolith architecture. Each domain (auth, users, subscriptions, payment history) is isolated into its own route, service, and schema layer while sharing a single deployment unit and database. This keeps the codebase simple to deploy and operate while maintaining clear boundaries for future extraction into independent services if needed.
 
 - **Async-first I/O** across all external service connections (database, cache, message broker).
 - **Clear separation of concerns** through dedicated layers for routing, business logic, data validation, and infrastructure.
@@ -57,7 +57,7 @@ The project follows a modular monolith architecture. Each domain (auth, users, s
 | Authentication    | JWT (PyJWT) + bcrypt + Google OAuth2    |
 | Data Validation   | Pydantic v2                             |
 | Configuration     | pydantic-settings (env-based)           |
-| Email             | SMTP (worker-based delivery)            |
+| Notifications     | SMTP worker                             |
 
 ---
 
@@ -68,6 +68,7 @@ subscription-monolith/
 |-- main.py                          # Application entrypoint and lifespan management
 |-- requirements.txt                 # Python dependencies
 |-- .env.example                     # Environment variables template
+|-- manual_db_changes.sql            # Manual SQL updates (no migration framework)
 |
 |-- core/                            # Infrastructure and cross-cutting concerns
 |   |-- config/config.py             # Centralized settings via pydantic-settings
@@ -81,11 +82,13 @@ subscription-monolith/
 |   |-- auth/router.py              # Login, Google login, logout, password reset flow
 |   |-- users/router.py             # User profile (GET /me, PUT /me, POST)
 |   |-- subscription/router.py      # Subscription CRUD + cancel
+|   |-- payment_history/router.py   # Register/list subscription payments
 |
 |-- services/                        # Business logic layer
 |   |-- auth/auth_service.py        # Authentication logic (credentials + Google)
 |   |-- user/user_service.py        # User CRUD operations
 |   |-- subscription/subscription_service.py  # Subscription CRUD operations
+|   |-- payment_history/payment_history_service.py # Payment registration and history
 |   |-- cache/cache_service.py      # Redis get/set/delete with JSON serialization
 |   |-- messaging/messaging_service.py  # RabbitMQ message publishing
 |
@@ -145,7 +148,7 @@ The security module (`core/security/security.py`) provides:
 
 A complete multi-step flow using Redis for temporary codes and two-phase JWT tokens:
 
-1. `POST /auth/forget-password` -- generates a 6-digit code, stores it in Redis (TTL 600s), publishes an email via RabbitMQ, and returns a JWT with `canUpdate: false` in an `auth_reset` cookie.
+1. `POST /auth/forget-password` -- generates a 6-digit code, stores it in Redis (TTL 600s), publishes an email message via RabbitMQ, and returns a JWT with `canUpdate: false` in an `auth_reset` cookie.
 2. `POST /auth/validate-code` -- validates the code against Redis. If correct, clears the Redis key and returns a new JWT with `canUpdate: true`.
 3. `POST /auth/update-password` -- requires the `canUpdate: true` token. Updates the password and clears the `auth_reset` cookie.
 
@@ -170,7 +173,7 @@ A complete multi-step flow using Redis for temporary codes and two-phase JWT tok
 | ------ | -------- | -------- | ------------------------------------ |
 | GET    | `/me`    | Required | Get authenticated user profile       |
 | PUT    | `/me`    | Required | Update email and/or fullname         |
-| POST   | `/`      | Required | Create a new user                    |
+| POST   | `/`      | Public   | Create a new user                    |
 
 ### Subscriptions (`/subscriptions`)
 
@@ -182,6 +185,14 @@ A complete multi-step flow using Redis for temporary codes and two-phase JWT tok
 | PUT    | `/{id}`               | Required | Update subscription fields               |
 | PATCH  | `/{id}/cancel`        | Required | Cancel a subscription (sets CANCELED)    |
 | DELETE | `/{id}`               | Required | Permanently delete a subscription        |
+
+### Payments (`/payments`)
+
+| Method | Endpoint                         | Auth     | Description                                         |
+| ------ | -------------------------------- | -------- | --------------------------------------------------- |
+| POST   | `/subscriptions/{subscriptionId}` | Required | Register a payment and advance `next_payment_date`   |
+| GET    | `/subscriptions/{subscriptionId}` | Required | List payment history for one subscription            |
+| GET    | `/history`                        | Required | List full user payment history with optional filters |
 
 All user-owned data queries enforce IDOR protection via `AND user_id = $X`.
 
@@ -221,6 +232,7 @@ cp .env.example .env
 | ---------------------------- | ------------------------------------ | ------------- |
 | `ENVIRONMENT`                | Runtime environment                  | `development` |
 | `API_PORT`                   | Server port                          | `8000`        |
+| `CORS_ALLOW_ORIGINS`         | Allowed CORS origins (comma-separated) | `http://localhost:4200` |
 | `DB_HOST`                    | PostgreSQL host                      | --            |
 | `DB_PORT`                    | PostgreSQL port                      | `5432`        |
 | `DB_USER`                    | PostgreSQL user                      | --            |
@@ -230,17 +242,25 @@ cp .env.example .env
 | `RABBITMQ_PORT`              | RabbitMQ port                        | `5672`        |
 | `RABBITMQ_USER`              | RabbitMQ user                        | --            |
 | `RABBITMQ_PASSWORD`          | RabbitMQ password                    | --            |
+| `EMAIL_QUEUE_NAME`           | RabbitMQ queue for email worker      | `email-queue` |
 | `REDIS_HOST`                 | Redis host                           | --            |
 | `REDIS_PORT`                 | Redis port                           | `6379`        |
 | `REDIS_PASSWORD`             | Redis password                       | `""`          |
 | `SECRET_KEY`                 | JWT signing key                      | --            |
 | `ALGORITHM`                  | JWT algorithm                        | `HS256`       |
 | `ACCESS_TOKEN_EXPIRE_MINUTES`| Token expiration in minutes          | `1440`        |
+| `RATE_LIMIT_WINDOW_SECONDS`  | Rate limit window in seconds         | `60`          |
+| `RATE_LIMIT_LOGIN_MAX_REQUESTS` | Max requests for `/auth/login` per window | `5`     |
+| `RATE_LIMIT_GOOGLE_LOGIN_MAX_REQUESTS` | Max requests for `/auth/google/login` per window | `10` |
+| `RATE_LIMIT_FORGET_PASSWORD_MAX_REQUESTS` | Max requests for `/auth/forget-password` per window | `5` |
+| `RATE_LIMIT_VALIDATE_CODE_MAX_REQUESTS` | Max requests for `/auth/validate-code` per window | `10` |
 | `SMTP_HOST`                  | SMTP server host                     | --            |
 | `SMTP_PORT`                  | SMTP server port                     | `587`         |
 | `SMTP_USER`                  | SMTP login user                      | --            |
 | `SMTP_PASSWORD`              | SMTP login password                  | --            |
 | `EMAIL_FROM`                 | Sender email address                 | --            |
+| `SMTP_TIMEOUT_SECONDS`       | SMTP timeout in seconds              | `15`          |
+| `SMTP_USE_STARTTLS`          | Enables SMTP STARTTLS                | `true`        |
 | `GOOGLE_CLIENT_ID`           | Google OAuth2 client ID              | --            |
 
 ---
@@ -272,6 +292,9 @@ pip install -r requirements.txt
 # Configure environment variables
 cp .env.example .env
 # Edit .env with your service credentials
+
+# Apply manual database updates for payment history
+psql -d subscription_db -f manual_db_changes.sql
 ```
 
 ### Running the API
