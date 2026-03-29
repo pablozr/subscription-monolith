@@ -19,6 +19,15 @@ async def check_renewal_reminders(scheduler, brazil_tz):
         await postgresql.connect()
         await rabbitmq.connect()
 
+        if not postgresql.pool:
+            raise RuntimeError("PostgreSQL pool is not initialized")
+
+        if not rabbitmq.channel:
+            raise RuntimeError("RabbitMQ channel is not initialized")
+
+        pool = postgresql.pool
+        channel = rabbitmq.channel
+
         query = """
             SELECT s.id, s.name, s.price, s.billing_cycle, s.next_payment_date,
                    u.email, u.fullname
@@ -29,29 +38,32 @@ async def check_renewal_reminders(scheduler, brazil_tz):
               AND s.next_payment_date >= $1::date
         """
 
-        async with postgresql.pool.acquire() as conn:
+        async with pool.acquire() as conn:
             rows = await conn.fetch(query, actual_date)
 
         logger.info(f"Found {len(rows)} subscriptions due for reminder on {actual_date}")
 
         for row in rows:
             payload = {
-                "to": row["email"],
-                "from": settings.EMAIL_FROM,
-                "html": f"""
-                    <h2>Lembrete de Renovação</h2>
-                    <p>Olá {row['fullname']},</p>
-                    <p>Sua assinatura <strong>{row['name']}</strong> no valor de
-                    <strong>R$ {row['price']:.2f}</strong> ({row['billing_cycle']})
-                    será renovada em <strong>{row['next_payment_date']}</strong>.</p>
-                """,
-                "subject": f"Lembrete: {row['name']} será renovada em breve",
-                "base64Attachment": "",
-                "base64AttachmentName": "",
-                "message": ""
+                "event": "renewal-reminder",
+                "email": {
+                    "to": row["email"],
+                    "from": settings.EMAIL_FROM,
+                    "html": f"""
+                        <h2>Lembrete de Renovação</h2>
+                        <p>Olá {row['fullname']},</p>
+                        <p>Sua assinatura <strong>{row['name']}</strong> no valor de
+                        <strong>R$ {row['price']:.2f}</strong> ({row['billing_cycle']})
+                        será renovada em <strong>{row['next_payment_date']}</strong>.</p>
+                    """,
+                    "subject": f"Lembrete: {row['name']} será renovada em breve",
+                    "base64Attachment": "",
+                    "base64AttachmentName": "",
+                    "message": ""
+                }
             }
 
-            await messaging_service.publish("email-queue", payload, rabbitmq.channel)
+            await messaging_service.publish_notification(payload, channel)
             logger.info(f"Reminder queued for {row['email']} - {row['name']}")
 
     except Exception as e:

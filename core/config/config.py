@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     RABBITMQ_PORT: int = 5672
     RABBITMQ_USER: str
     RABBITMQ_PASSWORD: str
+    EMAIL_QUEUE_NAME: str = "email-queue"
 
     REDIS_HOST: str
     REDIS_PORT: int = 6379
@@ -29,6 +30,8 @@ class Settings(BaseSettings):
     SMTP_USER: str
     SMTP_PASSWORD: str
     EMAIL_FROM: str
+    SMTP_TIMEOUT_SECONDS: int = 15
+    SMTP_USE_STARTTLS: bool = True
 
     GOOGLE_CLIENT_ID: str
 

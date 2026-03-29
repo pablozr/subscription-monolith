@@ -4,8 +4,11 @@ from pydantic import BaseModel, EmailStr, Field
 
 
 class UserGetDataResponse(TypedDict):
-    user_id: int
+    id: int
+    userId: int
     email: str
+    fullname: str
+    role: str
 
 
 class UserGetResponse(TypedDict):

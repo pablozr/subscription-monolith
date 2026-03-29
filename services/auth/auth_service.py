@@ -5,6 +5,7 @@ import redis.asyncio
 from schemas.auth import LoginRequestModel, LoginGoogleRequestModel, ForgetPasswordRequestModel
 from core.security import security
 from core.logger.logger import logger
+from core.config.config import settings
 from schemas.user import UserCreateRequest
 from services.user import user_service
 from functions.utils import utils
@@ -77,7 +78,7 @@ async def google_login(conn: asyncpg.Connection, data: LoginGoogleRequestModel) 
             new_user = UserCreateRequest(
                 email=google_user["email"],
                 password=secrets.token_urlsafe(32),
-                fullname=google_user["name"]
+                fullName=google_user["name"]
             )
 
             response = await user_service.create_user(conn, new_user)
@@ -140,16 +141,19 @@ async def forget_password(conn: asyncpg.Connection, clientmq, redis_client, data
         await cache_service.create_items_by_key(cache_key, 600, {"code": code}, redis_client)
 
         payload = {
-            "to": data.email,
-            "from": "pablo@sla",
-            "html": master_forget_password_email_template.replace('CODIGO_AQUI', code),
-            "subject": 'Redefinição de Senha',
-            "base64Attachment": '',
-            "base64AttachmentName": '',
-            "message": ''
+            "event": "forget-password",
+            "email": {
+                "to": data.email,
+                "from": settings.EMAIL_FROM,
+                "html": master_forget_password_email_template.replace("CODIGO_AQUI", code),
+                "subject": "Redefinição de Senha",
+                "base64Attachment": "",
+                "base64AttachmentName": "",
+                "message": ""
+            }
         }
 
-        await messaging_service.publish("email-queue", payload, clientmq)
+        await messaging_service.publish_notification(payload, clientmq)
 
         access_token = security.create_access_token(
             {
@@ -163,14 +167,14 @@ async def forget_password(conn: asyncpg.Connection, clientmq, redis_client, data
 
         return {
             "status": True,
-            "message": "Email sent successfully ",
+            "message": "Email queued successfully",
             "data": {
                 "access_token": access_token,
             }
         }
     except Exception as e:
         logger.error(e)
-        return {"status": False, "message": "An error occurred during sending email "}
+        return {"status": False, "message": "An error occurred while queueing email"}
 
 
 async def validate_code(redis_client: redis.asyncio.Redis, code: str, user: dict):
@@ -178,7 +182,7 @@ async def validate_code(redis_client: redis.asyncio.Redis, code: str, user: dict
         cache_key = f'{user["id"]}:{user["email"]}'
         redis_code = await cache_service.get_items_by_key(cache_key, redis_client)
 
-        if not redis_code:
+        if not redis_code or not isinstance(redis_code, dict):
             return {"status": False, "message": "Invalid user", "data": {}}
 
         if code != redis_code.get("code"):
