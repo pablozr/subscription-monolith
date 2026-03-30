@@ -315,6 +315,54 @@ python -m workers.smtp.email_worker
 python -m workers.schedule.renewal_reminder
 ```
 
+### Running with Docker Compose (API + workers)
+
+If you already have infrastructure services defined in `infra/docker-compose.yml` (PostgreSQL, Redis, RabbitMQ), you can run API + workers locally with:
+
+```bash
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml -f infra/docker-compose.local.yml up -d --build
+```
+
+Useful commands:
+
+```bash
+# Stop all services
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml -f infra/docker-compose.local.yml down
+
+# Follow API logs
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml -f infra/docker-compose.local.yml logs -f api
+```
+
+Keep only one `scheduler` instance running to avoid duplicate reminders.
+
+If you access infra services through Tailscale, set `EXPOSE_BIND_IP` in `.env` to your Tailscale IP (for example `100.x.y.z`).
+
+### Running with Nginx + domain (production)
+
+1. Point your DNS A record (`API_DOMAIN`) to the VPS public IP.
+2. Generate a Let's Encrypt certificate on the host:
+
+```bash
+sudo certbot certonly --standalone -d api.example.com -m you@example.com --agree-tos --non-interactive
+```
+
+3. Set `API_DOMAIN` in `.env` (example: `API_DOMAIN=api.example.com`).
+4. Start all services including Nginx reverse proxy (run from project root):
+
+```bash
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml -f infra/docker-compose.proxy.yml up -d --build
+```
+
+5. API should be available at `https://<API_DOMAIN>/api/v1/subreminders/docs`.
+
+Certificate files are mounted from `/etc/letsencrypt/live/${API_DOMAIN}` into the Nginx container.
+
+Recommended renewal for standalone mode (stops Nginx during validation):
+
+```bash
+sudo certbot renew --quiet --pre-hook "docker compose -f /path/to/subscription-monolith/infra/docker-compose.yml -f /path/to/subscription-monolith/infra/docker-compose.app.yml -f /path/to/subscription-monolith/infra/docker-compose.proxy.yml stop nginx" --post-hook "docker compose -f /path/to/subscription-monolith/infra/docker-compose.yml -f /path/to/subscription-monolith/infra/docker-compose.app.yml -f /path/to/subscription-monolith/infra/docker-compose.proxy.yml start nginx"
+```
+
 ---
 
 ## API Documentation

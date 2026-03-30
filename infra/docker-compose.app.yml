@@ -1,0 +1,59 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: subscription_api
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      DB_HOST: postgres_db
+      RABBITMQ_HOST: rabbitmq
+      REDIS_HOST: redis_cache
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    expose:
+      - "8000"
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis_cache:
+        condition: service_healthy
+
+  email_worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: subscription_email_worker
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      DB_HOST: postgres_db
+      RABBITMQ_HOST: rabbitmq
+      REDIS_HOST: redis_cache
+    command: python -m workers.smtp.email_worker
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: subscription_scheduler
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      DB_HOST: postgres_db
+      RABBITMQ_HOST: rabbitmq
+      REDIS_HOST: redis_cache
+    command: python -m workers.schedule.renewal_reminder
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
