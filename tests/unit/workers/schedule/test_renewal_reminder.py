@@ -43,14 +43,21 @@ class RenewalReminderExecutionTests(IsolatedAsyncioTestCase):
              patch("workers.schedule.renewal_reminder.postgresql.connect", AsyncMock()), \
              patch("workers.schedule.renewal_reminder.rabbitmq.connect", AsyncMock()), \
             patch("workers.schedule.renewal_reminder.postgresql.disconnect", AsyncMock()) as pg_disconnect, \
-            patch("workers.schedule.renewal_reminder.rabbitmq.disconnect", AsyncMock()) as mq_disconnect, \
-            patch("workers.schedule.renewal_reminder.messaging_service.publish_notification", AsyncMock()) as publish_notification, \
-            patch.object(renewal_reminder.postgresql, "pool", pool), \
-            patch.object(renewal_reminder.rabbitmq, "channel", object()), \
-            patch("workers.schedule.renewal_reminder.reagendar_tarefa") as reagendar:
+             patch("workers.schedule.renewal_reminder.rabbitmq.disconnect", AsyncMock()) as mq_disconnect, \
+             patch("workers.schedule.renewal_reminder.messaging_service.publish_notification", AsyncMock()) as publish_notification, \
+             patch.object(renewal_reminder.postgresql, "pool", pool), \
+             patch.object(renewal_reminder.rabbitmq, "channel", object()), \
+             patch("workers.schedule.renewal_reminder.reagendar_tarefa") as reagendar:
             await renewal_reminder.check_renewal_reminders(scheduler, timezone.utc)
 
         publish_notification.assert_awaited_once()
+        notification_payload = publish_notification.await_args_list[0].args[0]
+        self.assertEqual(notification_payload["event"], "renewal-reminder")
+        self.assertEqual(notification_payload["email"]["subject"], "Upcoming renewal: Netflix")
+        self.assertIn("Hello Test User", notification_payload["email"]["html"])
+        self.assertIn("March 31, 2026", notification_payload["email"]["html"])
+        self.assertIn("BRL 39.90", notification_payload["email"]["html"])
+        self.assertIn("Monthly", notification_payload["email"]["html"])
         pg_disconnect.assert_awaited_once()
         mq_disconnect.assert_awaited_once()
         reagendar.assert_called_once()

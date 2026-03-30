@@ -9,6 +9,7 @@ from core.config.config import settings
 from core.postgresql.postgresql import postgresql
 from core.rabbitmq.rabbitmq import rabbitmq
 from services.messaging import messaging_service
+from templates.renewal_reminder import build_renewal_reminder_email_content
 
 
 async def check_renewal_reminders(scheduler, brazil_tz):
@@ -44,19 +45,22 @@ async def check_renewal_reminders(scheduler, brazil_tz):
         logger.info(f"Found {len(rows)} subscriptions due for reminder on {actual_date}")
 
         for row in rows:
+            row_data = dict(row)
+            email_subject, email_html = build_renewal_reminder_email_content(
+                full_name=row_data.get("fullname"),
+                subscription_name=row_data.get("name"),
+                amount=row_data.get("price"),
+                billing_cycle=row_data.get("billing_cycle"),
+                renewal_date=row_data.get("next_payment_date"),
+            )
+
             payload = {
                 "event": "renewal-reminder",
                 "email": {
-                    "to": row["email"],
+                    "to": row_data["email"],
                     "from": settings.EMAIL_FROM,
-                    "html": f"""
-                        <h2>Lembrete de Renovação</h2>
-                        <p>Olá {row['fullname']},</p>
-                        <p>Sua assinatura <strong>{row['name']}</strong> no valor de
-                        <strong>R$ {row['price']:.2f}</strong> ({row['billing_cycle']})
-                        será renovada em <strong>{row['next_payment_date']}</strong>.</p>
-                    """,
-                    "subject": f"Lembrete: {row['name']} será renovada em breve",
+                    "html": email_html,
+                    "subject": email_subject,
                     "base64Attachment": "",
                     "base64AttachmentName": "",
                     "message": ""
@@ -64,7 +68,7 @@ async def check_renewal_reminders(scheduler, brazil_tz):
             }
 
             await messaging_service.publish_notification(payload, channel)
-            logger.info(f"Reminder queued for {row['email']} - {row['name']}")
+            logger.info(f"Reminder queued for {row_data['email']} - {row_data['name']}")
 
     except Exception as e:
         logger.exception(f"Error while checking renewal reminders: {e}")
@@ -121,7 +125,7 @@ if __name__ == "__main__":
     scheduler = sched.scheduler(time.time, time.sleep)
 
     now = datetime.now(tz=brazil_tz)
-    first_run = now.replace(hour=22, minute=10, second=0, microsecond=0)
+    first_run = now.replace(hour=22, minute=53, second=0, microsecond=0)
 
     if now >= first_run:
         first_run += timedelta(days=1)

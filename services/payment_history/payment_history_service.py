@@ -69,9 +69,9 @@ async def create_payment(
 
     insert_payment_query = """
         INSERT INTO payment_history
-            (subscription_id, user_id, reference_date, amount, paid_at, payment_method, reference, notes, created_at)
+            (subscription_id, user_id, amount, paid_at, payment_method, reference, notes, created_at)
         VALUES
-            ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+            ($1, $2, $3, $4, $5, $6, $7, NOW())
         RETURNING id, subscription_id, user_id, amount, paid_at, payment_method, reference, notes, created_at
     """
 
@@ -98,13 +98,12 @@ async def create_payment(
 
             paid_at = data.paid_at or date.today()
             amount = data.amount if data.amount is not None else float(subscription["price"])
-            reference_date = subscription["next_payment_date"] or paid_at
+            reference = subscription["next_payment_date"] or paid_at
 
             payment = await conn.fetchrow(
                 insert_payment_query,
                 subscription_id,
                 user_id,
-                reference_date,
                 amount,
                 paid_at,
                 data.payment_method,
@@ -116,7 +115,7 @@ async def create_payment(
                 raise ValueError("Payment not registered for this reference date")
 
             next_payment_date = calculate_next_payment_date(
-                current_next_payment=reference_date,
+                current_next_payment=reference,
                 paid_at=paid_at,
                 billing_cycle=subscription["billing_cycle"]
             )
