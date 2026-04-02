@@ -40,7 +40,7 @@ services:
     container_name: subscription_redis
     restart: unless-stopped
     env_file:
-      - ../.env
+      - ../../.env
     command:
       - sh
       - -c

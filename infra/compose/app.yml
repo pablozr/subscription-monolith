@@ -1,12 +1,12 @@
 services:
   api:
     build:
-      context: ..
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: infra/docker/app.Dockerfile
     container_name: subscription_api
     restart: unless-stopped
     env_file:
-      - ../.env
+      - ../../.env
     environment:
       DB_HOST: postgres_db
       RABBITMQ_HOST: rabbitmq
@@ -24,12 +24,12 @@ services:
 
   email_worker:
     build:
-      context: ..
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: infra/docker/app.Dockerfile
     container_name: subscription_email_worker
     restart: unless-stopped
     env_file:
-      - ../.env
+      - ../../.env
     environment:
       DB_HOST: postgres_db
       RABBITMQ_HOST: rabbitmq
@@ -41,12 +41,12 @@ services:
 
   scheduler:
     build:
-      context: ..
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: infra/docker/app.Dockerfile
     container_name: subscription_scheduler
     restart: unless-stopped
     env_file:
-      - ../.env
+      - ../../.env
     environment:
       DB_HOST: postgres_db
       RABBITMQ_HOST: rabbitmq

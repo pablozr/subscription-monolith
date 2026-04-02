@@ -105,7 +105,19 @@ subscription-monolith/
 |   |-- email.py                    # HTML email templates with placeholder tokens
 |
 |-- functions/                       # Shared utilities
-    |-- utils/utils.py              # Response wrappers, data serialization helpers
+|   |-- utils/utils.py              # Response wrappers, data serialization helpers
+|
+|-- infra/                           # Container/runtime assets
+|   |-- compose/
+|   |   |-- base.yml                # Shared infrastructure services (PostgreSQL, RabbitMQ, Redis)
+|   |   |-- app.yml                 # API + worker containers
+|   |   |-- dev.yml                 # Local developer overrides (host port publishing)
+|   |   |-- proxy.yml               # Reverse proxy overlay for domain-based deployments
+|   |-- docker/
+|   |   |-- app.Dockerfile          # Shared application image for API and workers
+|   |-- nginx/
+|       |-- nginx.conf              # Nginx root config
+|       |-- conf.d/api.conf         # Reverse proxy virtual host config
 ```
 
 Every module folder contains an `__init__.py` file.
@@ -317,20 +329,27 @@ python -m workers.schedule.renewal_reminder
 
 ### Running with Docker Compose (API + workers)
 
-If you already have infrastructure services defined in `infra/docker-compose.yml` (PostgreSQL, Redis, RabbitMQ), you can run API + workers locally with:
+The Docker setup is organized in layers under `infra/compose/`:
+
+- `base.yml` -> shared infrastructure services (PostgreSQL, Redis, RabbitMQ)
+- `app.yml` -> API + background worker containers
+- `dev.yml` -> local development overrides
+- `proxy.yml` -> Nginx/domain deployment overlay
+
+Run API + workers locally with:
 
 ```bash
-docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml -f infra/docker-compose.local.yml up -d --build
+docker compose -f infra/compose/base.yml -f infra/compose/app.yml -f infra/compose/dev.yml up -d --build
 ```
 
 Useful commands:
 
 ```bash
 # Stop all services
-docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml -f infra/docker-compose.local.yml down
+docker compose -f infra/compose/base.yml -f infra/compose/app.yml -f infra/compose/dev.yml down
 
 # Follow API logs
-docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml -f infra/docker-compose.local.yml logs -f api
+docker compose -f infra/compose/base.yml -f infra/compose/app.yml -f infra/compose/dev.yml logs -f api
 ```
 
 Keep only one `scheduler` instance running to avoid duplicate reminders.
@@ -350,7 +369,7 @@ sudo certbot certonly --standalone -d api.example.com -m you@example.com --agree
 4. Start all services including Nginx reverse proxy (run from project root):
 
 ```bash
-docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml -f infra/docker-compose.proxy.yml up -d --build
+docker compose -f infra/compose/base.yml -f infra/compose/app.yml -f infra/compose/proxy.yml up -d --build
 ```
 
 5. API should be available at `https://<API_DOMAIN>/api/v1/subreminders/docs`.
@@ -360,7 +379,7 @@ Certificate files are mounted from `/etc/letsencrypt/live/${API_DOMAIN}` into th
 Recommended renewal for standalone mode (stops Nginx during validation):
 
 ```bash
-sudo certbot renew --quiet --pre-hook "docker compose -f /path/to/subscription-monolith/infra/docker-compose.yml -f /path/to/subscription-monolith/infra/docker-compose.app.yml -f /path/to/subscription-monolith/infra/docker-compose.proxy.yml stop nginx" --post-hook "docker compose -f /path/to/subscription-monolith/infra/docker-compose.yml -f /path/to/subscription-monolith/infra/docker-compose.app.yml -f /path/to/subscription-monolith/infra/docker-compose.proxy.yml start nginx"
+sudo certbot renew --quiet --pre-hook "docker compose -f /path/to/subscription-monolith/infra/compose/base.yml -f /path/to/subscription-monolith/infra/compose/app.yml -f /path/to/subscription-monolith/infra/compose/proxy.yml stop nginx" --post-hook "docker compose -f /path/to/subscription-monolith/infra/compose/base.yml -f /path/to/subscription-monolith/infra/compose/app.yml -f /path/to/subscription-monolith/infra/compose/proxy.yml start nginx"
 ```
 
 ---
