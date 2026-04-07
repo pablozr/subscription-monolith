@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from dateutil.relativedelta import relativedelta
 
 
 class Settings(BaseSettings):
@@ -53,5 +54,11 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
+
+CYCLE_OFFSETS = {
+    "WEEKLY": relativedelta(weeks=1),
+    "MONTHLY": relativedelta(months=1),
+    "YEARLY": relativedelta(years=1),
+}
 
 settings = Settings()

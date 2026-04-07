@@ -1,18 +1,11 @@
 from datetime import date
-from dateutil.relativedelta import relativedelta
 import asyncpg
-from asyncpg.exceptions import UniqueViolationError, ForeignKeyViolationError
+from asyncpg.exceptions import ForeignKeyViolationError
 
 from schemas.subscription import SubscriptionCreateRequest, SubscriptionUpdateRequest
 from core.logger.logger import logger
 from functions.utils.utils import update_default_dict
-
-
-CYCLE_OFFSETS = {
-    "WEEKLY": relativedelta(weeks=1),
-    "MONTHLY": relativedelta(months=1),
-    "YEARLY": relativedelta(years=1),
-}
+from core.config.config import CYCLE_OFFSETS
 
 
 def calculate_next_payment(start_date: date, billing_cycle: str) -> date:

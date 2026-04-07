@@ -2,18 +2,11 @@ from datetime import date
 
 import asyncpg
 from asyncpg.exceptions import UniqueViolationError
-from dateutil.relativedelta import relativedelta
 
 from core.logger.logger import logger
 from functions.utils.utils import update_default_dict
 from schemas.payment_history import PaymentHistoryCreateRequest
-
-
-CYCLE_OFFSETS = {
-    "WEEKLY": relativedelta(weeks=1),
-    "MONTHLY": relativedelta(months=1),
-    "YEARLY": relativedelta(years=1),
-}
+from core.config.config import CYCLE_OFFSETS
 
 
 def calculate_next_payment_date(current_next_payment: date, paid_at: date, billing_cycle: str) -> date:
