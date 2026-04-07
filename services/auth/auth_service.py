@@ -14,15 +14,6 @@ from services.messaging import messaging_service
 from templates.email import master_forget_password_email_template
 
 
-def build_auth_user_payload(user_id: int, email: str, fullname: str, role: str) -> dict:
-    return {
-        "userId": user_id,
-        "email": email,
-        "fullname": fullname,
-        "role": role,
-    }
-
-
 async def login(conn: asyncpg.Connection, login_data: LoginRequestModel) -> dict:
     select_query = """
                    SELECT id, email, fullname, role, password, session_version
@@ -39,12 +30,13 @@ async def login(conn: asyncpg.Connection, login_data: LoginRequestModel) -> dict
         if not security.verify_password(login_data.password, user["password"]):
             return {"status": False, "message": "Invalid email or password", "data": {}}
 
-        user_data = build_auth_user_payload(
-            user_id=user["id"],
-            email=user["email"],
-            fullname=user["fullname"],
-            role=user["role"],
-        )
+        user_data = {
+            "userId": user["id"],
+            "email": user["email"],
+            "fullname": user["fullname"],
+            "role": user["role"],
+            "sessionVersion": user["session_version"],
+        }
 
         access_token = security.create_access_token(
             {
@@ -101,13 +93,13 @@ async def google_login(conn: asyncpg.Connection, data: LoginGoogleRequestModel) 
             user_data = response["data"]["user"]
             session_version = 1
         else:
-            user_data = build_auth_user_payload(
-                user_id=user["id"],
-                email=user["email"],
-                fullname=user["fullname"],
-                role=user["role"],
-            )
-            session_version = user["session_version"]
+            user_data = {
+                "userId": user["id"],
+                "email": user["email"],
+                "fullname": user["fullname"],
+                "role": user["role"],
+                "sessionVersion": user["session_version"],
+            }
 
         access_token = security.create_access_token(
             {
@@ -115,7 +107,7 @@ async def google_login(conn: asyncpg.Connection, data: LoginGoogleRequestModel) 
                 "email": user_data["email"],
                 "fullname": user_data["fullname"],
                 "role": user_data["role"],
-                "sessionVersion": session_version,
+                "sessionVersion": user_data["sessionVersion"],
                 "type": "auth"
             }
         )
