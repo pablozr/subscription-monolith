@@ -125,7 +125,7 @@ if __name__ == "__main__":
     scheduler = sched.scheduler(time.time, time.sleep)
 
     now = datetime.now(tz=brazil_tz)
-    first_run = now.replace(hour=22, minute=53, second=0, microsecond=0)
+    first_run = now.replace(hour=15, minute=47, second=0, microsecond=0)
 
     if now >= first_run:
         first_run += timedelta(days=1)

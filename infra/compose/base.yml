@@ -8,11 +8,11 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-subscription_db}
     ports:
-      - "${EXPOSE_BIND_IP:-127.0.0.1}:5432:5432"
+      - "${EXPOSE_BIND_IP:-127.0.0.1}:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-subscription_db}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-subscription_db}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -21,16 +21,18 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: subscription_rabbitmq
     restart: unless-stopped
+    env_file:
+      - ../../.env
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     ports:
       - "${EXPOSE_BIND_IP:-127.0.0.1}:5672:5672"
       - "${EXPOSE_BIND_IP:-127.0.0.1}:15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
